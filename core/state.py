@@ -1,6 +1,7 @@
 from typing import Optional
 from core.schemas import *
 import json
+import os
 from datetime import datetime
 
 
@@ -153,15 +154,17 @@ class AgentState:
         self.audit_trail.append(entry)
 
         # Save to audit file
-
-        with open(
-            "logs/audit_trail.jsonl",
-            "a"
-        ) as f:
-
-            f.write(
-                json.dumps(entry) + "\n"
-            )
+        try:
+            os.makedirs("logs", exist_ok=True)
+            with open(
+                "logs/audit_trail.jsonl",
+                "a"
+            ) as f:
+                f.write(
+                    json.dumps(entry) + "\n"
+                )
+        except Exception:
+            pass  # Non-critical: audit file write failure should not crash the app
 
     # =========================================================
     # RETRY TRACKER
