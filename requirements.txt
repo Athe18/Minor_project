@@ -1,0 +1,12 @@
+groq
+pydantic
+pandas
+openpyxl
+python-dotenv
+PyPDF2
+rich
+questionary
+fastapi
+uvicorn[standard]
+python-multipart
+reportlab
