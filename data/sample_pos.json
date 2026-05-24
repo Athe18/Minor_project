@@ -1,0 +1,46 @@
+[
+  {
+    "po_id": "PO1",
+    "statement": "Engineering Knowledge: Apply the knowledge of mathematics, natural science, computing, and engineering fundamentals and an engineering specialisation to the solution of complex engineering problems."
+  },
+  {
+    "po_id": "PO2",
+    "statement": "Problem Analysis: Identify, formulate, and analyse complex engineering problems, reaching substantiated conclusions with consideration for the holistic nature of the problem."
+  },
+  {
+    "po_id": "PO3",
+    "statement": "Design/Development of Solutions: Design creative solutions for complex engineering problems and design systems, components, or processes to meet identified needs with consideration for public health, safety, and sustainability."
+  },
+  {
+    "po_id": "PO4",
+    "statement": "Conduct Investigations of Complex Problems: Conduct investigations using research-based knowledge and methods including analysis, interpretation of data, and synthesis of information to provide valid conclusions."
+  },
+  {
+    "po_id": "PO5",
+    "statement": "Engineering Tool Usage: Create, select, and apply appropriate techniques, resources, and modern engineering and IT tools, including prediction and modelling, while recognising their limitations."
+  },
+  {
+    "po_id": "PO6",
+    "statement": "The Engineer and the World: Analyse and evaluate societal, environmental, economic, health, safety, legal, cultural, and sustainability aspects while solving complex engineering problems."
+  },
+  {
+    "po_id": "PO7",
+    "statement": "Ethics: Apply ethical principles, professional ethics, human values, diversity, inclusion, and adhere to relevant laws and responsibilities."
+  },
+  {
+    "po_id": "PO8",
+    "statement": "Individual and Collaborative Team Work: Function effectively as an individual and as a member or leader in diverse and multidisciplinary teams."
+  },
+  {
+    "po_id": "PO9",
+    "statement": "Communication: Communicate effectively and inclusively with the engineering community and society through reports, documentation, and presentations."
+  },
+  {
+    "po_id": "PO10",
+    "statement": "Project Management and Finance: Apply engineering management principles and economic decision-making to manage projects in multidisciplinary environments."
+  },
+  {
+    "po_id": "PO11",
+    "statement": "Life-Long Learning: Recognise the need for independent and continuous learning, adaptability to emerging technologies, and critical thinking."
+  }
+]

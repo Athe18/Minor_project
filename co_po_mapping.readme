@@ -1,0 +1,539 @@
+
+================================================================================
+              CO-PO MAPPING — HOW IT WORKS (Detailed Technical Guide)
+              Multi-Agent NBA/NAAC Accreditation Intelligence System
+================================================================================
+
+This document explains, step by step, how CO-PO mapping is performed in this
+system — covering both the AI (LLM) path and the manual path, the data models,
+validation rules, and the PI (Performance Indicator) alignment layer.
+
+────────────────────────────────────────────────────────────────────────────────
+TABLE OF CONTENTS
+────────────────────────────────────────────────────────────────────────────────
+
+  1. Overview & Big Picture
+  2. Key Terminology
+  3. Data Models (Schemas)
+  4. Phase 1 — Course Outcomes (CO) Generation
+  5. Phase 2 — Performance Indicators (PI) Generation
+  6. Phase 3 — CO-PO Articulation Matrix (AI Mapping)
+  7. Phase 4 — PI Alignment Matrix (AI Mapping)
+  8. Phase 5 — Mapping Validation
+  9. Strength Calculation Logic (PI → CO-PO)
+ 10. Manual Override (Human-in-the-Loop)
+ 11. Rule: AI Mapping is ONE-TIME ONLY
+ 12. Files & Agents Involved
+ 13. Full Data Flow Diagram
+
+────────────────────────────────────────────────────────────────────────────────
+1. OVERVIEW & BIG PICTURE
+────────────────────────────────────────────────────────────────────────────────
+
+The system performs CO-PO mapping in TWO independent layers:
+
+  LAYER 1 — CO-PO Articulation Matrix (Primary)
+    → Pure LLM semantic reasoning
+    → Each (CO, PO) cell gets a STRENGTH value: 0, 1, 2, or 3
+    → Done by: POMapperAgent  (agents/po_mapper.py)
+
+  LAYER 2 — PI Alignment Matrix (Supporting / Accreditation)
+    → LLM reads syllabus + CO statements + PI definitions
+    → Each (CO, PI) cell is either MAPPED ("Y") or UNMAPPED ("N")
+    → Done by: PIMapperAgent  (agents/pi_mapper.py)
+    → PI mappings can OPTIONALLY recalculate CO-PO strengths
+      (function: calculate_po_co_strengths)
+
+These two layers are INDEPENDENT. Changes to the PI matrix do not automatically
+overwrite the CO-PO Articulation Matrix unless you explicitly trigger a
+recalculation (done from the frontend SubjectWorkspace page).
+
+────────────────────────────────────────────────────────────────────────────────
+2. KEY TERMINOLOGY
+────────────────────────────────────────────────────────────────────────────────
+
+  CO   — Course Outcome
+         A specific, measurable learning result for a subject.
+         Example: "CO1: Apply normalization techniques to design a relational schema"
+         Bloom's Level: 3 (Apply) to 6 (Create) — L1 and L2 are NOT allowed.
+
+  PO   — Program Outcome
+         A broad graduate-level capability that the entire program achieves.
+         PO1 to PO12 are the standard NBA program outcomes.
+         Example: "PO1: Engineering Knowledge"
+
+  PI   — Performance Indicator
+         A fine-grained, measurable competency UNDER a PO.
+         Each PO has 2–4 PIs. PI IDs follow the format: {po_num}.{competency}.{indicator}
+         Example PI ID: "1.1.1" (under PO1, Competency 1.1, Indicator 1)
+         Example PI: "Apply mathematical concepts like calculus to engineering problems."
+
+  Strength — The CO-PO mapping intensity:
+         0 = No relationship
+         1 = Slight / Low
+         2 = Moderate / Medium
+         3 = Strong / High (NBA requirement for PO1, PO2, PO3)
+
+  Bloom's Level — Cognitive complexity of a CO:
+         L3 = Apply   (apply, implement, solve, use)
+         L4 = Analyze (analyze, differentiate, compare, examine)
+         L5 = Evaluate(evaluate, justify, assess, critique)
+         L6 = Create  (design, create, formulate, develop, build)
+
+────────────────────────────────────────────────────────────────────────────────
+3. DATA MODELS (SCHEMAS)
+────────────────────────────────────────────────────────────────────────────────
+
+Defined in: core/schemas.py
+
+  CourseOutcome
+  ┌─────────────────────┬───────────────────────────────────────────────────┐
+  │ Field               │ Description                                       │
+  ├─────────────────────┼───────────────────────────────────────────────────┤
+  │ co_id               │ "CO1", "CO2", etc.                                │
+  │ statement           │ Full CO text starting with a Bloom's verb         │
+  │ blooms_level        │ Integer 3–6                                       │
+  │ blooms_keyword      │ "Apply", "Analyze", "Evaluate", "Create"          │
+  │ confidence_score    │ Float 0.0–1.0 (LLM self-confidence)               │
+  │ validation_status   │ "pending" | "approved" | "rejected"               │
+  │ rejection_reason    │ Why the CO was flagged (optional)                 │
+  └─────────────────────┴───────────────────────────────────────────────────┘
+
+  ProgramOutcome
+  ┌─────────────────────┬───────────────────────────────────────────────────┐
+  │ po_id               │ "PO1" to "PO12"                                   │
+  │ statement           │ Standard NBA PO description                       │
+  └─────────────────────┴───────────────────────────────────────────────────┘
+
+  MappingEntry  (CO-PO Articulation Matrix cell)
+  ┌─────────────────────┬───────────────────────────────────────────────────┐
+  │ co_id               │ CO identifier                                     │
+  │ po_id               │ PO identifier                                     │
+  │ strength            │ 0, 1, 2, or 3                                     │
+  │ reasoning           │ Why this strength was assigned (AI text)          │
+  │ confidence          │ Float 0.0–1.0                                     │
+  │ validated           │ Boolean — whether it passed validation            │
+  └─────────────────────┴───────────────────────────────────────────────────┘
+
+  PerformanceIndicator
+  ┌─────────────────────┬───────────────────────────────────────────────────┐
+  │ po_id               │ Parent PO (e.g. "PO1")                            │
+  │ competency_id       │ Group ID (e.g. "1.1")                             │
+  │ competency_statement│ Description of the competency group               │
+  │ pi_id               │ Unique PI ID (e.g. "1.1.1")                       │
+  │ pi_statement        │ Measurable competency description                 │
+  └─────────────────────┴───────────────────────────────────────────────────┘
+
+  PIMappingEntry  (PI Alignment Matrix cell)
+  ┌─────────────────────┬───────────────────────────────────────────────────┐
+  │ co_id               │ CO identifier                                     │
+  │ pi_id               │ PI identifier                                     │
+  │ mapped              │ "Y" (aligned) or "N" (not aligned)                │
+  │ reasoning           │ One-sentence explanation of why it is aligned     │
+  │ suggestion          │ How to create alignment if currently "N"          │
+  └─────────────────────┴───────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────
+4. PHASE 1 — COURSE OUTCOMES (CO) GENERATION
+────────────────────────────────────────────────────────────────────────────────
+
+Agent:   agents/co_generator.py
+Trigger: Frontend "Course Outcomes" page → "Trigger CO Generator Agent" button
+
+HOW IT WORKS:
+  1. The system reads the uploaded syllabus (up to 4000 characters).
+  2. It sends the syllabus + subject name to the LLM (temperature=0 for
+     deterministic output).
+  3. The LLM returns a JSON array of COs following these rules:
+       - Bloom's Level MINIMUM is L3 (Apply)
+       - L1 and L2 are strictly forbidden
+       - Distribution across L3, L4, L5, L6
+       - Every CO must start with an allowed Bloom's action verb
+       - COs must be non-overlapping, measurable, practical
+  4. COs are then validated by COValidatorAgent (agents/co_validator.py):
+       - Checks for duplicate verbs
+       - Checks Bloom's level distribution
+       - Checks minimum word count
+       - Up to 3 automatic retries if validation fails
+  5. Human-in-the-loop: The user can provide critique feedback
+     ("too theoretical", "missing design problems", etc.) and the agent
+     regenerates the COs incorporating that feedback.
+
+BLOOMS VERB RULES:
+  L3 – Apply:    apply, demonstrate, implement, solve, use, execute, perform
+  L4 – Analyze:  analyze, differentiate, compare, examine, break down, categorize
+  L5 – Evaluate: evaluate, justify, assess, critique, defend, argue
+  L6 – Create:   design, create, formulate, develop, construct, build, produce
+
+────────────────────────────────────────────────────────────────────────────────
+5. PHASE 2 — PERFORMANCE INDICATORS (PI) GENERATION
+────────────────────────────────────────────────────────────────────────────────
+
+Agent:   agents/pi_generator.py
+Trigger: "Course Setup" page → Department & Vision Mission submission
+
+HOW IT WORKS:
+  1. The system loads a TEMPLATE of default PIs for the selected department
+     from: core/default_pis.py
+
+  2. The template covers PO1 through PO12, each with 2–4 PIs.
+     Total typical PIs: ~26 entries.
+
+  3. If the user provided a Vision & Mission text/PDF:
+       → The LLM customizes the competency_statement and pi_statement to
+         reflect the department's specific focus (e.g., software architectures
+         for Computer Engineering, neural networks for AIML, etc.)
+       → Same IDs (po_id, competency_id, pi_id) are KEPT — only the text changes.
+
+  4. If no Vision & Mission was provided:
+       → Default template PIs are used directly (no LLM call).
+
+DEPARTMENT-SPECIFIC CUSTOMIZATIONS (from default_pis.py):
+  • Computer Engineering  → PI 1.4.1: Computer architecture, OS, discrete math
+                            PI 3.1.1: Software architectures, DB schemas, networking
+  • Data Science          → PI 1.4.1: Statistics, data structures, databases
+                            PI 3.1.1: Data pipelines, analytics dashboards
+  • AIML                  → PI 1.4.1: Linear algebra, probability, optimization
+                            PI 3.1.1: Neural networks, NLP, computer vision
+  • Software Engineering  → Design patterns, secure software, OOP paradigms
+  • Information Technology→ Cloud computing, network protocols, web tech
+  • Mechanical Engineering→ Thermodynamics, fluid mechanics, materials science
+  • Chemical Engineering  → Transport phenomena, reaction kinetics
+  • Civil Engineering     → Structural analysis, soil mechanics, hydraulics
+
+────────────────────────────────────────────────────────────────────────────────
+6. PHASE 3 — CO-PO ARTICULATION MATRIX (AI MAPPING — LAYER 1)
+────────────────────────────────────────────────────────────────────────────────
+
+Agent:   agents/po_mapper.py
+File:    agents/po_mapper.py
+Trigger: Frontend "Mapping" page → "Generate with AI" button
+         (available ONLY if no mapping exists yet — one-time only)
+
+HOW IT WORKS:
+  1. The agent reads all generated COs as text:
+       "CO1: Apply normalization techniques..."
+       "CO2: Design a distributed database system..."
+       ...
+
+  2. The agent reads all 12 standard Program Outcomes (PO1–PO12) as text:
+       "PO1: Engineering Knowledge — Apply..."
+       "PO2: Problem Analysis — Identify and formulate..."
+       ...
+
+  3. A detailed prompt is sent to the LLM with STRICT RULES:
+       - Strength 0: No meaningful relationship
+       - Strength 1: Weak relationship
+       - Strength 2: Moderate relationship
+       - Strength 3: Strong relationship
+       - PO1, PO2, PO3 MUST receive strong mappings (NBA requirement)
+       - At least 2 strong mappings for major POs
+       - Avoid random/meaningless mappings
+       - Every cell includes a "reasoning" explanation
+
+  4. The LLM returns a JSON array of MappingEntry objects covering
+     every (CO, PO) combination.
+
+  5. Results are saved to state.co_po_mapping and stored in the database.
+
+  6. Validation runs (MappingValidatorAgent) — see Phase 5.
+
+EXAMPLE OUTPUT (one entry in the JSON array):
+  {
+    "co_id": "CO1",
+    "po_id": "PO1",
+    "strength": 3,
+    "reasoning": "CO1 directly applies mathematical models in database
+                  normalization, fulfilling PO1 Engineering Knowledge.",
+    "confidence": 0.91
+  }
+
+WHAT HAPPENS IN THE FRONTEND:
+  - The matrix is rendered as a grid (COs as rows, POs as columns).
+  - Each cell shows the strength: 3 (green), 2 (amber), 1 (rose), − (none)
+  - Clicking a cell opens a popup showing:
+       • The full CO statement
+       • The full PO statement
+       • The AI reasoning text
+       • Bloom's taxonomy alignment explanation
+       • A manual strength selector (0, 1, 2, 3) for override
+
+────────────────────────────────────────────────────────────────────────────────
+7. PHASE 4 — PI ALIGNMENT MATRIX (AI MAPPING — LAYER 2)
+────────────────────────────────────────────────────────────────────────────────
+
+Agent:   agents/pi_mapper.py → function run()
+Trigger: Frontend "Mapping" page → "Auto-Map with AI" button (one-time only)
+
+HOW IT WORKS:
+  Step A — Initialize ALL combinations as UNMAPPED:
+    For every CO × every PI combination, create a PIMappingEntry with:
+      mapped = "N"
+      reasoning = "No direct alignment found."
+      suggestion = "Incorporate activities testing this PI."
+
+    Example: 6 COs × 26 PIs = 156 total cells, all starting as "N".
+
+  Step B — LLM identifies MAPPED combinations:
+    The prompt includes:
+      1. First 3000 characters of the syllabus text
+      2. All CO statements (JSON)
+      3. All PI statements (JSON)
+
+    The LLM is asked:
+      "Identify all (CO, PI) pairs that have a valid correlation.
+       Correlation exists if the syllabus topic, when associated with
+       the learning outcome, directly addresses the competency in the PI."
+
+    The LLM returns ONLY the mapped "Y" pairs (not the unmapped ones).
+    Each returned entry has:
+      { "co_id": "CO1", "pi_id": "1.1.1", "reasoning": "..." }
+
+  Step C — Update the matrix:
+    For each LLM-returned pair, the system finds the corresponding entry
+    in all_mappings and sets:
+      mapped = "Y"
+      reasoning = <LLM reasoning>
+      suggestion = ""  (cleared since it's now mapped)
+
+  Step D — Save:
+    state.pi_mappings = list of all 156 PIMappingEntry objects
+    (some "Y", most "N")
+
+  IMPORTANT: The CO-PO Articulation Matrix (Layer 1) is NOT touched here.
+  The PI matrix is a separate accreditation support tool.
+
+WHAT HAPPENS IN THE FRONTEND:
+  - The PI matrix is shown grouped by PO (PO1 → PO12), each PO row
+    expandable to show its PIs.
+  - Each cell shows "Y" (green) or "N" (grey).
+  - Clicking a cell shows:
+       • The CO statement
+       • The PI full statement
+       • Toggle button (Y ↔ N) for manual override
+       • AI reasoning (if mapped)
+       • "Ask AI How to Map This PI" button (for unmapped cells)
+
+────────────────────────────────────────────────────────────────────────────────
+8. PHASE 5 — MAPPING VALIDATION
+────────────────────────────────────────────────────────────────────────────────
+
+Agent:   agents/mapping_validator.py
+Runs:    Automatically after CO-PO generation (no LLM needed — rule-based)
+
+VALIDATION RULES:
+
+  Rule 1: Every CO must map to at least one PO with strength >= 2
+    → If any CO has NO moderate/strong mapping, it is flagged.
+    → Issue example: "CO3 has no strong mapping (>=2) to any PO"
+
+  Rule 2: PO1, PO2, and PO3 must have at least one CO mapping with strength >= 2
+    → These are MANDATORY NBA requirements for accreditation.
+    → Issue example: "PO2 has no strong CO mappings — NBA requirement not met"
+    → Suggestion: "Ensure at least 2 COs map strongly to PO2"
+
+  Rule 3: Low-confidence flag
+    → Any mapping with confidence < 0.5 AND strength > 0 is flagged.
+    → Issue example: "3 mappings have low confidence scores"
+
+  RESULT:
+    passed = True  → All rules satisfied
+    passed = False → Issues list is returned for display + potential retry
+
+────────────────────────────────────────────────────────────────────────────────
+9. STRENGTH CALCULATION LOGIC (PI → CO-PO)
+────────────────────────────────────────────────────────────────────────────────
+
+Function: calculate_po_co_strengths() in agents/pi_mapper.py
+Purpose:  Derive CO-PO strengths FROM the PI alignment matrix
+          (This is an ALTERNATIVE to the LLM-based direct mapping)
+
+ALGORITHM (per CO, per PO):
+  1. Find all PIs that belong to this PO (po_pis)
+  2. Count how many of those PIs have mapped = "Y" for this CO (mapped_count)
+  3. Calculate percentage = (mapped_count / total_pis) * 100
+
+  STRENGTH THRESHOLDS (NBA-calibrated for 3–4 PIs per PO):
+  ┌─────────────────────────────────────────────┬──────────────────────────┐
+  │ Condition                                   │ Strength                 │
+  ├─────────────────────────────────────────────┼──────────────────────────┤
+  │ mapped_count == 0                           │ 0 (No mapping)           │
+  │ mapped_count >= total_pis OR percentage >= 40% │ 3 (Strong)           │
+  │ percentage >= 20%                           │ 2 (Moderate)             │
+  │ At least 1 PI mapped, but < 20%             │ 1 (Slight)               │
+  └─────────────────────────────────────────────┴──────────────────────────┘
+
+  NOTE: The old 67% threshold was too strict (required 3/4 PIs = nearly
+  impossible for a single subject). The 40% threshold is the current
+  calibrated standard.
+
+EXAMPLE:
+  PO1 has 4 PIs. CO1 is mapped to 2 of those PIs.
+  percentage = (2/4) * 100 = 50%
+  50% >= 40% → Strength = 3 (Strong)
+
+  Reasoning stored: "CO1 maps to PO1 (Strength: 3) by aligning with
+  2/4 performance indicators: 1.1.1, 1.3.1."
+
+────────────────────────────────────────────────────────────────────────────────
+10. MANUAL OVERRIDE (HUMAN-IN-THE-LOOP)
+────────────────────────────────────────────────────────────────────────────────
+
+After the initial AI mapping, ALL changes must be done manually.
+There is no "Re-Map" button — AI runs only ONCE per subject.
+
+CO-PO MATRIX — Manual Override:
+  • Click any cell in the Articulation Matrix.
+  • A popup opens showing the AI reasoning and Bloom's alignment.
+  • Use the strength selector (−, 1, 2, 3) to change the value.
+  • Click "Save Matrix" to persist changes to the database.
+  • You can also use "Ask AI How to Map This" for guidance on zero-strength cells.
+
+PI ALIGNMENT MATRIX — Manual Override:
+  • Click any cell in the PI Matrix.
+  • Toggle the cell between "Y" (Mapped) and "N" (Unmapped).
+  • The system updates the local state immediately.
+  • Click "Save PI Matrix" to persist all changes.
+  • You can ask AI for suggestions on unmapped cells without triggering a remap.
+
+CO OUTCOMES — Manual Edit:
+  • On the Course Outcomes page, click the edit icon on any CO.
+  • Modify the statement text, Bloom's level, or keyword.
+  • Click "Apply Changes" to update locally.
+  • Click "Save Edits" to persist.
+  • Click "Refine Outcomes" with feedback text to trigger a NEW AI regeneration
+    (this ONLY applies to CO generation, not mapping).
+
+────────────────────────────────────────────────────────────────────────────────
+11. RULE: AI MAPPING IS ONE-TIME ONLY
+────────────────────────────────────────────────────────────────────────────────
+
+By design, the AI mapping is performed only ONCE per subject:
+
+  CO-PO Matrix:
+    → "Generate with AI" button is shown ONLY when localMappings.length === 0
+    → Once generated and saved, the button disappears permanently.
+    → All future changes are manual (cell-by-cell strength editing).
+
+  PI Matrix:
+    → "Auto-Map with AI" button is shown ONLY when no PI has mapped = "Y"
+    → Once generated and saved, the button disappears permanently.
+    → All future changes are manual (Y/N toggling per cell).
+
+WHY?
+  This ensures that faculty manually review and own the mapping decisions.
+  It prevents accidental AI overwriting of carefully adjusted accreditation
+  matrices. NBA/NAAC accreditation requires faculty accountability for mappings.
+
+────────────────────────────────────────────────────────────────────────────────
+12. FILES & AGENTS INVOLVED
+────────────────────────────────────────────────────────────────────────────────
+
+Backend (Python):
+  agents/po_mapper.py         — CO-PO LLM mapping agent (Layer 1)
+  agents/pi_mapper.py         — CO-PI LLM mapping agent + strength calculator
+  agents/pi_generator.py      — Generates/customizes PIs for the department
+  agents/co_generator.py      — Generates NBA-compliant COs from syllabus
+  agents/co_validator.py      — Validates CO quality (Bloom's, verb rules)
+  agents/mapping_validator.py — Validates CO-PO mapping (NBA rules)
+  core/schemas.py             — All Pydantic data models
+  core/state.py               — AgentState — shared memory across all agents
+  core/default_pis.py         — Department-specific PI template definitions
+  core/orchestrator.py        — CLI-based orchestrator (legacy workflow)
+  server.py                   — FastAPI server with all REST API endpoints
+
+Frontend (React):
+  src/pages/Mapping.jsx       — CO-PO and PI matrix UI, manual edit, save
+  src/pages/CourseOutcomes.jsx— CO generation UI, feedback, manual edit
+  src/pages/Setup.jsx         — Course setup, department, vision/mission upload
+  src/pages/SubjectWorkspace.jsx — Main workspace orchestrating all phases
+
+────────────────────────────────────────────────────────────────────────────────
+13. FULL DATA FLOW DIAGRAM
+────────────────────────────────────────────────────────────────────────────────
+
+  [Syllabus PDF/TXT]
+        │
+        ▼
+  ┌─────────────────────┐
+  │  Setup Page         │  → Subject name, Year, Thresholds, Department
+  │  (server.py)        │  → Vision & Mission text / PDF
+  └─────────────────────┘
+        │
+        ├──────────────────────────────────────────────────────────┐
+        ▼                                                          ▼
+  ┌──────────────────┐                                  ┌──────────────────────┐
+  │ COGeneratorAgent │ ← syllabus_text (4000 chars)     │ PIGeneratorAgent      │
+  │ Bloom L3–L6 only │                                  │ Loads department PIs  │
+  │ → state.cos      │                                  │ + LLM customization   │
+  └──────────────────┘                                  │ → state.performance_  │
+        │                                               │   indicators          │
+        ▼                                               └──────────────────────┘
+  ┌──────────────────┐                                          │
+  │ COValidatorAgent │ (rule-based, up to 3 retries)           │
+  │ → validates COs  │                                          │
+  └──────────────────┘                                          │
+        │                                                        │
+        └──────────────────────┬─────────────────────────────────┘
+                               │  (COs + POs + PIs ready)
+                               ▼
+              ┌─────────────────────────────────────┐
+              │         MAPPING PHASE               │
+              │  (frontend: Mapping.jsx)            │
+              └─────────────────────────────────────┘
+                    │                     │
+                    ▼                     ▼
+          ┌─────────────────┐   ┌───────────────────┐
+          │  POMapperAgent  │   │   PIMapperAgent   │
+          │  (Layer 1)      │   │   (Layer 2)       │
+          │  LLM reads COs  │   │  LLM reads COs +  │
+          │  + PO statements│   │  PIs + syllabus   │
+          │  → strength 0-3 │   │  → Y/N per cell   │
+          │  per (CO, PO)   │   │  per (CO, PI)     │
+          └─────────────────┘   └───────────────────┘
+                    │                     │
+                    ▼                     │ (optional)
+          ┌──────────────────┐            ▼
+          │MappingValidator  │  calculate_po_co_strengths()
+          │ NBA rules check  │  (re-derives CO-PO from PI %)
+          │ PO1/PO2/PO3 req  │
+          └──────────────────┘
+                    │
+                    ▼
+          ┌──────────────────────────────────────────┐
+          │     MATRIX SAVED TO DATABASE             │
+          │  co_po_mapping = [{co_id, po_id,          │
+          │                   strength, reasoning}]   │
+          │  pi_mappings   = [{co_id, pi_id,          │
+          │                   mapped, reasoning}]     │
+          └──────────────────────────────────────────┘
+                    │
+                    ▼
+          ┌──────────────────────────────────────────┐
+          │   HUMAN MANUAL REVIEW & OVERRIDE         │
+          │   (all future edits are manual only)     │
+          │   AI mapping cannot be re-triggered       │
+          └──────────────────────────────────────────┘
+                    │
+                    ▼
+          ┌──────────────────────────────────────────┐
+          │     CO ATTAINMENT (Marks Upload)         │
+          │   → CO attainment levels (1/2/3)         │
+          │     via student marks CSV                │
+          └──────────────────────────────────────────┘
+                    │
+                    ▼
+          ┌──────────────────────────────────────────┐
+          │     PO ATTAINMENT                        │
+          │   PO_attainment = weighted average of    │
+          │   CO_attainment × mapping strength       │
+          └──────────────────────────────────────────┘
+                    │
+                    ▼
+          ┌──────────────────────────────────────────┐
+          │   AI RECOMMENDATIONS + EXCEL REPORT      │
+          └──────────────────────────────────────────┘
+
+================================================================================
+END OF DOCUMENT
+================================================================================
