@@ -10,9 +10,11 @@ Your job is to critically evaluate Course Outcomes and reject poor quality ones.
 def run(state: AgentState) -> tuple[AgentState, ValidationReport]:
     state.log("COValidatorAgent", "start", "Validating COs")
 
+    target_cos = state.new_generated_cos if state.new_generated_cos else state.cos
+
     cos_text = "\n".join([
         f"{co.co_id} (Bloom's L{co.blooms_level}): {co.statement}"
-        for co in state.cos
+        for co in target_cos
     ])
 
     prompt = f"""
@@ -49,7 +51,7 @@ Return ONLY JSON:
     )
 
     # Update individual CO statuses
-    for co in state.cos:
+    for co in target_cos:
         feedback = data.get("co_feedback", {}).get(co.co_id, {})
         co.validation_status = feedback.get("status", "approved")
         co.rejection_reason = feedback.get("reason")

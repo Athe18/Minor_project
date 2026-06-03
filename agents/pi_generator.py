@@ -25,13 +25,13 @@ def run(state: AgentState) -> AgentState:
     # 1. Load default template for the department
     defaults = get_default_pis(state.department)
     
-    # If no custom vision/mission is uploaded/entered, we can use the defaults directly
+    # If no custom vision/mission is uploaded/entered, we do NOT automatically generate/load defaults.
     if not state.vision_mission.strip():
-        state.performance_indicators = [PerformanceIndicator(**pi) for pi in defaults]
+        state.performance_indicators = []
         state.log(
             "PIGeneratorAgent",
             "complete",
-            f"Loaded {len(state.performance_indicators)} default indicators (no custom Vision & Mission provided)."
+            "No custom Vision & Mission provided. Performance indicators left empty."
         )
         return state
 

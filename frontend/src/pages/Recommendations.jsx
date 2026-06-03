@@ -2,15 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { attainmentAPI } from '../api';
 import { Lightbulb, CheckCircle2, ArrowRight, RefreshCw, Layers } from 'lucide-react';
 
-export default function Recommendations({ courseState, refreshState }) {
+export default function Recommendations({ courseState, refreshState, activeSubjectId }) {
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (courseState?.recommendations) {
-      setRecommendations(courseState.recommendations);
+    if (courseState && courseState.subject_name === activeSubjectId) {
+      setRecommendations(courseState.recommendations || []);
     }
-  }, [courseState]);
+  }, [courseState, activeSubjectId]);
 
   const handleGenerate = async () => {
     setLoading(true);

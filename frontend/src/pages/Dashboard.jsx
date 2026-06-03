@@ -13,29 +13,22 @@ import {
   BookOpen, 
   TrendingUp, 
   AlertCircle,
-  Clock,
   ArrowRight,
   Plus,
   Trash2,
   Play,
-  Sparkles,
   Activity,
   Layers,
-  GraduationCap
 } from 'lucide-react';
 import { subjectAPI } from '../api';
+
 
 export default function Dashboard({ setActiveTab, onSelectSubject }) {
   const [subjects, setSubjects] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Form state for adding subject
-  const [newSubjectName, setNewSubjectName] = useState('');
-  const [newSubjectYear, setNewSubjectYear] = useState('SY');
-  const [formSubmitting, setFormSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
+
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -58,29 +51,6 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
   useEffect(() => {
     loadDashboardData();
   }, []);
-
-  const handleAddSubject = async (e) => {
-    e.preventDefault();
-    if (!newSubjectName.trim()) return;
-    
-    setFormSubmitting(true);
-    setFormError('');
-    try {
-      const res = await subjectAPI.create(newSubjectName.trim(), newSubjectYear);
-      if (res.data.success) {
-        setNewSubjectName('');
-        // Trigger reload
-        await loadDashboardData();
-        // Automatically open this subject in workspace
-        handleWorkOnSubject(res.data.subject_id);
-      }
-    } catch (err) {
-      console.error('Error creating subject:', err);
-      setFormError(err.response?.data?.detail || 'Failed to create subject.');
-    } finally {
-      setFormSubmitting(false);
-    }
-  };
 
   const handleDeleteSubject = async (subjectId) => {
     if (!window.confirm(`Are you sure you want to delete the subject "${subjectId}"? This will delete all syllabus and calculations for this subject.`)) {
@@ -232,63 +202,22 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
         {/* Left 2 Cols: Directory & Add Subject */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* Add Subject Card */}
-          <div className="glass-panel p-5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-              <Plus className="w-24 h-24 text-blue-500" />
+          {/* Add New Subject Button */}
+          <button
+            onClick={() => setActiveTab('setup')}
+            className="w-full glass-panel p-5 flex items-center justify-between gap-4 group hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 text-left"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
+                <Plus className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover:text-blue-500 transition-colors">Add New Subject</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Open Course Setup to configure a new subject with CO generation</p>
+              </div>
             </div>
-            
-            <h4 className="font-bold text-sm uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-blue-500" />
-              Quick Subject Initialization
-            </h4>
-            
-            <form onSubmit={handleAddSubject} className="flex flex-col sm:flex-row gap-4 items-end">
-              <div className="flex-1 w-full space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase">Subject Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Operating Systems"
-                  value={newSubjectName}
-                  onChange={(e) => setNewSubjectName(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-slate-800 dark:text-slate-100"
-                />
-              </div>
-              
-              <div className="w-full sm:w-32 space-y-1.5">
-                <label className="text-xs font-bold text-slate-400 uppercase">Study Year</label>
-                <select
-                  value={newSubjectYear}
-                  onChange={(e) => setNewSubjectYear(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-slate-800 dark:text-slate-100"
-                >
-                  <option value="FY">First Year (FY)</option>
-                  <option value="SY">Second Year (SY)</option>
-                  <option value="TY">Third Year (TY)</option>
-                  <option value="BTech">B.Tech (Final)</option>
-                </select>
-              </div>
-              
-              <button
-                type="submit"
-                disabled={formSubmitting}
-                className="w-full sm:w-auto px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/10 transition-all hover:translate-y-[-1px]"
-              >
-                {formSubmitting ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    Create
-                  </>
-                )}
-              </button>
-            </form>
-            {formError && (
-              <p className="text-xs text-rose-500 mt-2 font-medium">{formError}</p>
-            )}
-          </div>
+            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all duration-200 shrink-0" />
+          </button>
 
           {/* Directory table */}
           <div className="glass-panel p-5 space-y-4">
@@ -313,6 +242,7 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
                     <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] text-slate-450 font-bold uppercase tracking-wider">
                       <th className="pb-3 pl-2">Subject Name</th>
                       <th className="pb-3">Year</th>
+                      <th className="pb-3">Semester</th>
                       <th className="pb-3">Status</th>
                       <th className="pb-3">Avg CO Attainment</th>
                       <th className="pb-3">Weak POs</th>
@@ -329,6 +259,15 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
                           <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-900 text-slate-500 font-semibold border dark:border-slate-800">
                             {sub.year}
                           </span>
+                        </td>
+                        <td className="py-3.5">
+                          {sub.semester ? (
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 font-semibold text-[10px]">
+                              {sub.semester.replace('Semester ', 'Sem ')}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="py-3.5">
                           {getStatusBadge(sub)}

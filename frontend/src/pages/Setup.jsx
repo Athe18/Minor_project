@@ -1,336 +1,405 @@
 import React, { useState, useEffect } from 'react';
-import { courseAPI } from '../api';
-import { Upload, CheckCircle2, AlertTriangle, HelpCircle, Loader2 } from 'lucide-react';
+import { ChevronRight, GraduationCap, BookOpen, ArrowLeft, CheckCircle2, Loader2, TestTube2 } from 'lucide-react';
+import api from '../api';
 
-export default function Setup({ activeCourse, refreshState }) {
-  const [subjectName, setSubjectName] = useState(activeCourse?.subject_name || '');
-  const [year, setYear] = useState(activeCourse?.year || 'SY');
-  const [lvl1, setLvl1] = useState(activeCourse?.level1_threshold || 55);
-  const [lvl2, setLvl2] = useState(activeCourse?.level2_threshold || 65);
-  const [lvl3, setLvl3] = useState(activeCourse?.level3_threshold || 75);
-  const [syllabusFile, setSyllabusFile] = useState(null);
-  
-  const [department, setDepartment] = useState(activeCourse?.department || localStorage.getItem('department') || 'Department of Computer Engineering');
-  const [visionMission, setVisionMission] = useState(activeCourse?.vision_mission || '');
-  const [visionFile, setVisionFile] = useState(null);
+// ─── Static data ────────────────────────────────────────────────────────────
+const YEAR_THRESHOLDS = {
+  FY: { lvl1: 50, lvl2: 55, lvl3: 60 },
+  SY: { lvl1: 60, lvl2: 65, lvl3: 70 },
+  TY: { lvl1: 65, lvl2: 72, lvl3: 80 },
+  LY: { lvl1: 70, lvl2: 75, lvl3: 85 },
+};
 
+const YEAR_OPTIONS = [
+  { value: 'FY', label: 'First Year (FY)',   short: 'FY', style: 'bg-sky-500/5 text-sky-600 dark:text-sky-400 border-sky-500/10 dark:border-sky-500/20',       semLabel: 'Sem 1 & 2' },
+  { value: 'SY', label: 'Second Year (SY)',  short: 'SY', style: 'bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/10 dark:border-indigo-500/20',  semLabel: 'Sem 3 & 4' },
+  { value: 'TY', label: 'Third Year (TY)',   short: 'TY', style: 'bg-purple-500/5 text-purple-600 dark:text-purple-400 border-purple-500/10 dark:border-purple-500/20', semLabel: 'Sem 5 & 6' },
+  { value: 'LY', label: 'Final Year (LY)',   short: 'LY', style: 'bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/10 dark:border-rose-500/20',      semLabel: 'Sem 7 & 8' },
+];
+
+const SEM_OPTIONS = {
+  FY: ['Semester 1', 'Semester 2'],
+  SY: ['Semester 3', 'Semester 4'],
+  TY: ['Semester 5', 'Semester 6'],
+  LY: ['Semester 7', 'Semester 8'],
+};
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+const isLab = (name) =>
+  /\blab\b/i.test(name);
+
+export default function Setup({ setActiveTab, refreshState }) {
+  // Wizard state
+  const [step, setStep]           = useState(1);   // 1=year, 2=semester, 3=subject
+  const [year, setYear]           = useState('');
+  const [semester, setSemester]   = useState('');
+  const [subject, setSubject]     = useState('');
+  const [curriculum, setCurriculum] = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState('');
+
+  // Fetch curriculum catalogue on mount
   useEffect(() => {
-    if (activeCourse) {
-      setSubjectName(activeCourse.subject_name || '');
-      setYear(activeCourse.year || 'SY');
-      setLvl1(activeCourse.level1_threshold || 55);
-      setLvl2(activeCourse.level2_threshold || 65);
-      setLvl3(activeCourse.level3_threshold || 75);
-      setDepartment(activeCourse.department || localStorage.getItem('department') || 'Department of Computer Engineering');
-      setVisionMission(activeCourse.vision_mission || '');
-    }
-  }, [activeCourse]);
-  
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [error, setError] = useState('');
+    api.get('/curriculum').then(r => setCurriculum(r.data)).catch(console.error);
+  }, []);
 
-  // Handle year changes to automatically offer preset thresholds
-  const handleYearChange = (e) => {
-    const selectedYear = e.target.value;
-    setYear(selectedYear);
-    if (selectedYear === 'FY') {
-      setLvl1(50); setLvl2(55); setLvl3(60);
-    } else if (selectedYear === 'SY') {
-      setLvl1(60); setLvl2(65); setLvl3(70);
-    } else if (selectedYear === 'TY') {
-      setLvl1(65); setLvl2(75); setLvl3(80);
-    }
-  };
+  // Available subjects for the chosen year+semester
+  const availableSubjects = (() => {
+    if (!curriculum || !year || !semester) return [];
+    return curriculum['CSE (Data Science)']?.[year]?.[semester] || [];
+  })();
 
-  const handleFileChange = (e) => {
-    setSyllabusFile(e.target.files[0]);
-  };
+  const theorySubjects = availableSubjects.filter(s => !isLab(s));
+  const labSubjects    = availableSubjects.filter(s =>  isLab(s));
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setSuccess(false);
+  // Step handlers
+  const handleYearSelect = (y) => {
+    setYear(y);
+    setSemester('');
+    setSubject('');
+    localStorage.setItem('selected_year', y);
+    setStep(2);
     setError('');
+  };
 
+  const handleSemesterSelect = (sem) => {
+    setSemester(sem);
+    setSubject('');
+    setStep(3);
+    setError('');
+  };
+
+  const handleSubjectSelect = (sub) => {
+    setSubject(sub);
+  };
+
+  const handleProceed = async () => {
+    if (!subject) { setError('Please select a subject first.'); return; }
+    setLoading(true);
+    setError('');
     try {
-      // 1. Setup Course first to create/register it in the backend
-      const formData = new FormData();
-      formData.append('subject_name', subjectName);
-      formData.append('year', year);
-      formData.append('level1_threshold', lvl1);
-      formData.append('level2_threshold', lvl2);
-      formData.append('level3_threshold', lvl3);
-      if (syllabusFile) {
-        formData.append('syllabus_file', syllabusFile);
-      }
-
-      const response = await courseAPI.setup(formData);
-
-      // Save the active subject ID in localStorage so subsequent API calls use it
-      if (response.data && response.data.subject_name) {
-        localStorage.setItem('active_subject_id', response.data.subject_name);
-      }
-
-      // 2. Setup Department & vision mission (generates PIs for the newly created subject)
-      const deptFormData = new FormData();
-      deptFormData.append('department', department);
-      deptFormData.append('vision_mission', visionMission);
-      if (visionFile) {
-        deptFormData.append('vision_file', visionFile);
-      }
-      await courseAPI.setupDepartment(deptFormData);
-      localStorage.setItem('department', department);
-
-      setSuccess(true);
-      refreshState();
+      await api.post('/workflow/academic-setup', {
+        department: localStorage.getItem('department') || 'Department of Computer Engineering',
+        vision_mission: localStorage.getItem('vision_mission') || '',
+        year,
+        semester,
+        subject_name: subject,
+      });
+      localStorage.setItem('selected_year', year);
+      localStorage.setItem('selected_semester', semester);
+      localStorage.setItem('selected_subject', subject);
+      localStorage.setItem('active_subject_id', subject);
+      if (refreshState) await refreshState(subject);
+      setActiveTab('cos');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to submit configuration details.');
+      setError(err?.response?.data?.detail || 'Failed to configure course. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleClearForm = () => {
-    if (window.confirm('Are you sure you want to clear the form and set up a new subject? This will not delete your existing subjects.')) {
-      setSubjectName('');
-      setYear('SY');
-      setLvl1(55);
-      setLvl2(65);
-      setLvl3(75);
-      setSyllabusFile(null);
-      setVisionMission('');
-      setVisionFile(null);
-      setSuccess(false);
-      setError('');
-      
-      // Clear active subject ID locally to decouple session
-      localStorage.removeItem('active_subject_id');
-      refreshState();
-    }
-  };
+  // ── Step indicators ─────────────────────────────────────────────────────
+  const STEPS = [
+    { n: 1, label: 'Select Year' },
+    { n: 2, label: 'Select Semester' },
+    { n: 3, label: 'Select Subject' },
+  ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6">
+
+      {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold font-sans tracking-tight">Course Setup & Syllabus Parsing</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Configure your course details, select study levels, set attainment benchmarks, and upload a syllabus PDF.</p>
+        <h2 className="text-2xl font-bold font-sans tracking-tight">Course Setup</h2>
+        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Configure your course in 3 simple steps — Year → Semester → Subject.
+        </p>
       </div>
 
-      <div className="glass-panel p-6 lg:p-8">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          
-          {/* Main details */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Course / Subject Name
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Database Management Systems"
-                value={subjectName}
-                onChange={(e) => setSubjectName(e.target.value)}
-                className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
-                Year of Study
-              </label>
-              <select
-                value={year}
-                onChange={handleYearChange}
-                className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-              >
-                <option value="FY">First Year (FY)</option>
-                <option value="SY">Second Year (SY)</option>
-                <option value="TY">Third Year (TY)</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Threshold sliders */}
-          <div className="border-t border-slate-100 dark:border-slate-800/60 pt-6">
-            <div className="flex items-center gap-1.5 mb-4">
-              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                NBA Target Attainment Thresholds (out of 100)
-              </label>
-              <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-pointer" title="These benchmarks represent the percentage of marks a student needs to reach a particular attainment level." />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/40 rounded-xl">
-                <span className="text-xs text-rose-500 font-semibold uppercase tracking-wide">Level 1 (Low)</span>
-                <div className="flex items-center justify-between mt-2">
-                  <input
-                    type="range" min="40" max="100" value={lvl1}
-                    onChange={(e) => setLvl1(parseInt(e.target.value))}
-                    className="w-3/4 accent-rose-500"
-                  />
-                  <span className="text-sm font-bold">{lvl1}%</span>
-                </div>
+      {/* Progress strip */}
+      <div className="glass-panel p-4 flex items-center gap-2">
+        {STEPS.map((s, i) => (
+          <React.Fragment key={s.n}>
+            <div className="flex items-center gap-2">
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                step > s.n
+                  ? 'bg-emerald-500 text-white'
+                  : step === s.n
+                    ? 'bg-blue-600 text-white ring-4 ring-blue-500/20'
+                    : 'bg-slate-100 dark:bg-slate-900 text-slate-400'
+              }`}>
+                {step > s.n ? <CheckCircle2 className="w-3.5 h-3.5" /> : s.n}
               </div>
-
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/40 rounded-xl">
-                <span className="text-xs text-amber-500 font-semibold uppercase tracking-wide">Level 2 (Medium)</span>
-                <div className="flex items-center justify-between mt-2">
-                  <input
-                    type="range" min="40" max="100" value={lvl2}
-                    onChange={(e) => setLvl2(parseInt(e.target.value))}
-                    className="w-3/4 accent-amber-500"
-                  />
-                  <span className="text-sm font-bold">{lvl2}%</span>
-                </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800/40 rounded-xl">
-                <span className="text-xs text-green-500 font-semibold uppercase tracking-wide">Level 3 (High)</span>
-                <div className="flex items-center justify-between mt-2">
-                  <input
-                    type="range" min="40" max="100" value={lvl3}
-                    onChange={(e) => setLvl3(parseInt(e.target.value))}
-                    className="w-3/4 accent-green-500"
-                  />
-                  <span className="text-sm font-bold">{lvl3}%</span>
-                </div>
-              </div>
+              <span className={`text-xs font-semibold hidden sm:block ${step === s.n ? 'text-blue-500' : 'text-slate-400'}`}>
+                {s.label}
+              </span>
             </div>
-          </div>
+            {i < STEPS.length - 1 && (
+              <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+            )}
+          </React.Fragment>
+        ))}
 
-          {/* Department Setup */}
-          <div className="border-t border-slate-100 dark:border-slate-800/60 pt-6 space-y-4">
-            <div className="flex items-center gap-1.5 mb-2">
-              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Department & Vision Mission Setup
-              </label>
-              <HelpCircle className="w-3.5 h-3.5 text-slate-400 cursor-pointer" title="Configures your academic department and generates the Program Indicators (PIs) based on your Vision & Mission text/PDF." />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Active selection summary */}
+        <div className="ml-auto flex items-center gap-2 flex-wrap">
+          {year && (
+            <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 text-[10px] font-bold">{year}</span>
+          )}
+          {semester && (
+            <span className="px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-500 text-[10px] font-bold">{semester}</span>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 rounded-xl text-xs font-medium">
+          {error}
+        </div>
+      )}
+
+      {/* ── STEP 1: YEAR ─────────────────────────────────────────────────── */}
+      {step === 1 && (
+        <div className="glass-panel p-6 lg:p-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <GraduationCap className="w-5 h-5" />
+              </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-2">
-                  Academic Department
-                </label>
-                <select
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800 dark:text-slate-100"
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">
+                  Step 1 — Select Year of Study
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Attainment thresholds are auto-configured per NBA norms
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-1 text-xs text-slate-450 hover:text-slate-655 dark:hover:text-slate-350 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Cancel Setup
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {YEAR_OPTIONS.map((opt) => {
+              const t = YEAR_THRESHOLDS[opt.value];
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => handleYearSelect(opt.value)}
+                  className="group relative flex flex-col items-start text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/[0.02] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer w-full"
                 >
-                  <option value="Department of Computer Engineering">Department of Computer Engineering</option>
-                  <option value="Department of CSE (Data Science)">Department of CSE (Data Science)</option>
-                  <option value="Department of CSE (AIML)">Department of CSE (AIML)</option>
-                  <option value="Department of Software Engineering">Department of Software Engineering</option>
-                  <option value="Department of Information Technology">Department of Information Technology</option>
-                  <option value="Department of Mechanical Engineering">Department of Mechanical Engineering</option>
-                  <option value="Department of Chemical Engineering">Department of Chemical Engineering</option>
-                  <option value="Department of Civil Engineering">Department of Civil Engineering</option>
-                </select>
-              </div>
+                  <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${opt.style}`}>
+                    {opt.short}
+                  </span>
+                  
+                  <span className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-3">{opt.label}</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{opt.semLabel}</span>
 
+                  <div className="mt-4 flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-850 w-full pt-3">
+                    <span className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[8px]">Thresholds</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> L1 ≥ {t.lvl1}%</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> L2 ≥ {t.lvl2}%</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> L3 ≥ {t.lvl3}%</span>
+                  </div>
+
+                  <ChevronRight className="absolute right-4 top-[35%] -translate-y-1/2 w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 2: SEMESTER ─────────────────────────────────────────────── */}
+      {step === 2 && (
+        <div className="glass-panel p-6 lg:p-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                <BookOpen className="w-5 h-5" />
+              </div>
               <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase mb-2">
-                  Upload Vision & Mission PDF (.pdf or .txt)
-                </label>
-                <div className="border-2 border-dashed border-slate-200 dark:border-slate-850 rounded-2xl p-3 text-center relative cursor-pointer hover:border-blue-500 transition-colors">
-                  <input
-                    type="file"
-                    accept=".pdf,.txt"
-                    onChange={(e) => setVisionFile(e.target.files[0])}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  />
-                  <span className="text-xs font-semibold text-slate-500 block truncate">
-                    {visionFile ? visionFile.name : 'Choose Vision & Mission File'}
-                  </span>
-                </div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">
+                  Step 2 — Select Semester
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Choose which semester you are teaching
+                </p>
               </div>
             </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-400 uppercase mb-2">
-                Department Vision & Mission Statement
-              </label>
-              <textarea
-                placeholder="e.g. To be a premier center of excellence in education..."
-                value={visionMission}
-                onChange={(e) => setVisionMission(e.target.value)}
-                rows={3}
-                className="block w-full px-4 py-3 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-slate-800 dark:text-slate-100"
-              />
-            </div>
-          </div>
-
-          {/* File upload */}
-          <div className="border-t border-slate-100 dark:border-slate-800/60 pt-6">
-            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">
-              Upload Syllabus File (.pdf or .txt)
-            </label>
-            
-            <div className="border-2 border-dashed border-slate-200 dark:border-slate-850 rounded-2xl p-6 text-center hover:border-blue-500 dark:hover:border-blue-500 transition-colors relative cursor-pointer">
-              <input
-                type="file"
-                accept=".pdf,.txt"
-                onChange={handleFileChange}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="flex flex-col items-center justify-center gap-2">
-                <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div>
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    {syllabusFile ? syllabusFile.name : 'Select or drag and drop syllabus file'}
-                  </span>
-                  <p className="text-xs text-slate-400 mt-1">Supports PDF (extracts text) or TXT files up to 10MB</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Alerts */}
-          {error && (
-            <div className="flex items-center gap-2.5 bg-rose-950/20 border border-rose-900/40 rounded-xl p-4 text-sm text-rose-400">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          {success && (
-            <div className="flex items-center gap-2.5 bg-green-950/20 border border-green-900/40 rounded-xl p-4 text-sm text-green-400">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span>Configuration successfully saved and syllabus file has been parsed. Proceed to CO generation.</span>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800/60 pt-6">
             <button
-              type="button"
-              onClick={handleClearForm}
-              className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-850 text-slate-650 dark:text-slate-350 text-sm font-semibold rounded-xl transition-all"
+              onClick={() => setStep(1)}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
             >
-              Clear Form & Create New
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
             </button>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(SEM_OPTIONS[year] || []).map((sem) => (
+              <button
+                key={sem}
+                onClick={() => handleSemesterSelect(sem)}
+                className="group relative flex flex-col items-start text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 hover:border-indigo-500/40 hover:shadow-lg hover:shadow-indigo-500/[0.02] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer w-full"
+              >
+                <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/10 dark:border-indigo-500/20">
+                  {sem.replace('Semester ', 'Sem ')}
+                </span>
+                
+                <span className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-3">{sem}</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Click to configure course outcomes</span>
+                
+                <ChevronRight className="absolute right-4 top-[50%] -translate-y-1/2 w-4 h-4 text-slate-300 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all" />
+              </button>
+            ))}
+          </div>
+
+          <div className="border-t dark:border-slate-800 pt-5">
             <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded-xl shadow-md shadow-blue-600/10 transition-all disabled:opacity-50"
+              onClick={() => setStep(1)}
+              className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/40 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all text-xs border dark:border-slate-850"
             >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving & Parsing...
-                </>
-              ) : (
-                'Save Settings & Load Syllabus'
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Year Selection
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 3: SUBJECT ──────────────────────────────────────────────── */}
+      {step === 3 && (
+        <div className="glass-panel p-6 lg:p-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-500">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 font-sans">
+                  Step 3 — Select Subject
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  {year} · {semester} · CSE (Data Science)
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => { setStep(2); setSubject(''); }}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+          </div>
+
+          {!curriculum ? (
+            <div className="flex items-center justify-center py-12 gap-2 text-slate-400 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading subjects...
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Theory subjects */}
+              {theorySubjects.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Theory Subjects</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {theorySubjects.map((sub) => (
+                      <button
+                        key={sub}
+                        onClick={() => handleSubjectSelect(sub)}
+                        className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl border transition-all duration-150 ${
+                          subject === sub
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-blue-500/40 hover:bg-blue-500/5 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{sub}</span>
+                        {subject === sub && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
-            </button>
-          </div>
-        </form>
-      </div>
+
+              {/* Lab subjects */}
+              {labSubjects.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <TestTube2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider">Lab / Practical Subjects</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {labSubjects.map((sub) => (
+                      <button
+                        key={sub}
+                        onClick={() => handleSubjectSelect(sub)}
+                        className={`w-full flex items-center justify-between text-left px-4 py-3 rounded-xl border transition-all duration-150 ${
+                          subject === sub
+                            ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20'
+                            : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 hover:border-emerald-500/40 hover:bg-emerald-500/5 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        <span className="text-sm font-semibold">{sub}</span>
+                        {subject === sub && <CheckCircle2 className="w-4 h-4 shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {availableSubjects.length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-sm">
+                  No subjects found for {year} — {semester}. Please contact your department administrator.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Proceed CTA */}
+          {subject ? (
+            <div className="border-t dark:border-slate-800 pt-5 space-y-3">
+              <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-bold text-blue-500">Selected Course:</p>
+                <p>{subject}</p>
+                <p className="text-slate-400">{year} · {semester} · CSE (Data Science)</p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => { setStep(2); setSubject(''); }}
+                  className="flex-1 py-3 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/40 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all text-xs border dark:border-slate-850"
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back
+                </button>
+                <button
+                  onClick={handleProceed}
+                  disabled={loading}
+                  className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all text-xs"
+                >
+                  {loading
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Configuring Course...</>
+                    : <><ChevronRight className="w-4 h-4" /> Proceed to Course Outcomes</>
+                  }
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="border-t dark:border-slate-800 pt-5">
+              <button
+                type="button"
+                onClick={() => { setStep(2); setSubject(''); }}
+                className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-900/40 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all text-xs border dark:border-slate-850"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Semester Selection
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ class CourseOutcome(BaseModel):
     confidence_score: float = 0.0
     validation_status: str = "pending"  # pending/approved/rejected
     rejection_reason: Optional[str] = None
+    target_attainment: float = 60.0
 
 class ProgramOutcome(BaseModel):
     po_id: str
@@ -25,11 +26,19 @@ class MappingEntry(BaseModel):
 class COAttainment(BaseModel):
     co_id: str
     avg_percentage: float
-    level_1_students_pct: float
-    level_2_students_pct: float
-    level_3_students_pct: float
-    achieved_level: int
+    level_1_students_pct: float = 0.0
+    level_2_students_pct: float = 0.0
+    level_3_students_pct: float = 0.0
+    achieved_level: float
     threshold_used: dict
+    ia_percentage: Optional[float] = None
+    ia_level: Optional[float] = None
+    mse_percentage: Optional[float] = None
+    mse_level: Optional[float] = None
+    cie_percentage: Optional[float] = None
+    cie_level: Optional[float] = None
+    ese_percentage: Optional[float] = None
+    ese_level: Optional[float] = None
 
 class POAttainment(BaseModel):
     po_id: str

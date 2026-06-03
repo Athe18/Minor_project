@@ -12,6 +12,7 @@ import Attainment from './pages/Attainment';
 import Recommendations from './pages/Recommendations';
 import Reports from './pages/Reports';
 import AssignmentGenerator from './pages/AssignmentGenerator';
+import AnalysisDashboard from './pages/AnalysisDashboard';
 import { courseAPI } from './api';
 import Chatbot from './components/Chatbot';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -56,8 +57,12 @@ export default function App() {
   }, [dark]);
 
   // Load backend active course state
-  const refreshState = async () => {
+  const refreshState = async (overrideSubjectId) => {
     if (!auth) return;
+    if (overrideSubjectId) {
+      localStorage.setItem('active_subject_id', overrideSubjectId);
+      setActiveSubjectId(overrideSubjectId);
+    }
     try {
       const response = await courseAPI.getState();
       setCourseState(response.data);
@@ -73,7 +78,7 @@ export default function App() {
   const handleSelectSubject = (subjectId) => {
     setActiveSubjectId(subjectId);
     localStorage.setItem('active_subject_id', subjectId);
-    refreshState();
+    refreshState(subjectId);
   };
 
   useEffect(() => {
@@ -100,12 +105,16 @@ export default function App() {
 
   if (!department) {
     return (
-      <DepartmentSelect 
-        facultyName={auth.name} 
-        onSelect={(dept) => {
-          localStorage.setItem('department', dept);
-          setDepartment(dept);
-        }} 
+      <DepartmentSelect
+        facultyName={auth.name}
+        onSelect={(dept, visionMission) => {
+          const fullDept = `Department of ${dept}`;
+          localStorage.setItem('department', fullDept);
+          if (visionMission) {
+            localStorage.setItem('vision_mission', visionMission);
+          }
+          setDepartment(fullDept);
+        }}
       />
     );
   }
@@ -118,25 +127,27 @@ export default function App() {
       case 'workspace':
         return (
           <ErrorBoundary>
-            <SubjectWorkspace activeSubjectId={activeSubjectId} refreshAllState={refreshState} />
+            <SubjectWorkspace activeSubjectId={activeSubjectId} refreshAllState={refreshState} setActiveTab={setActiveTab} />
           </ErrorBoundary>
         );
       case 'setup':
-        return <Setup activeCourse={courseState} refreshState={refreshState} />;
+        return <Setup key={activeSubjectId} activeCourse={courseState} refreshState={refreshState} setActiveTab={setActiveTab} />;
       case 'cos':
-        return <CourseOutcomes courseState={courseState} refreshState={refreshState} />;
+        return <CourseOutcomes key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
       case 'mapping':
-        return <Mapping courseState={courseState} refreshState={refreshState} />;
+        return <Mapping key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
       case 'philosophy':
-        return <Philosophy courseState={courseState} refreshState={refreshState} />;
+        return <Philosophy key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
       case 'attainment':
-        return <Attainment courseState={courseState} refreshState={refreshState} />;
+        return <Attainment key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+      case 'analysis':
+        return <AnalysisDashboard key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} setActiveTab={setActiveTab} />;
       case 'recommendations':
-        return <Recommendations courseState={courseState} refreshState={refreshState} />;
+        return <Recommendations key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
       case 'reports':
-        return <Reports courseState={courseState} />;
+        return <Reports key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} />;
       case 'assignment':
-        return <AssignmentGenerator courseState={courseState} refreshState={refreshState} />;
+        return <AssignmentGenerator key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
       default:
         return <Dashboard setActiveTab={setActiveTab} onSelectSubject={handleSelectSubject} />;
     }

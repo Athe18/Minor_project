@@ -32,7 +32,7 @@ export const authAPI = {
 
 export const subjectAPI = {
   list: () => api.get('/subjects'),
-  create: (subject_name, year) => api.post('/subjects', { subject_name, year }),
+  create: (subject_name, year, semester) => api.post('/subjects', { subject_name, year, semester }),
   delete: (subject_id) => api.delete(`/subjects/${subject_id}`),
   setActive: (subject_id) => api.post('/subjects/active', { subject_id }),
   getActive: () => api.get('/subjects/active'),
@@ -84,6 +84,7 @@ export const mappingAPI = {
   getMappings: () => api.get('/mappings'),
   generate: () => api.post('/mappings/generate'),
   update: (mappings) => api.put('/mappings/update', { mappings }),
+  recalculate: () => api.post('/mappings/recalculate'),
   lock: () => api.post('/mappings/lock'),
   unlock: () => api.post('/mappings/unlock'),
   generatePI: () => api.post('/mappings/pi/generate'),
@@ -97,9 +98,13 @@ export const philosophyAPI = {
 };
 
 export const attainmentAPI = {
-  uploadMarks: (file) => {
+  uploadMarks: (file, coTargets, assessmentType) => {
     const formData = new FormData();
     formData.append('marks_file', file);
+    formData.append('assessment_type', assessmentType);
+    if (coTargets) {
+      formData.append('co_targets', JSON.stringify(coTargets));
+    }
     return api.post('/attainment/upload-marks', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -108,11 +113,14 @@ export const attainmentAPI = {
   },
   getAttainment: () => api.get('/attainment'),
   generateRecommendations: () => api.post('/recommendations/generate'),
+  saveManualInput: (attainments, coTargets) => api.post('/attainment/manual-input', { attainments, co_targets: coTargets }),
+  clearAttainment: () => api.post('/attainment/clear'),
 };
 
 export const reportAPI = {
   downloadExcel: () => api.get('/report/excel', { responseType: 'blob' }),
   downloadPDF: () => api.get('/report/pdf', { responseType: 'blob' }),
+  downloadAnalysisPDF: () => api.get('/analysis/pdf', { responseType: 'blob' }),
 };
 
 export const assignmentAPI = {

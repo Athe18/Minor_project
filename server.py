@@ -26,10 +26,15 @@ import agents.reflection_agent as reflect
 import agents.assignment_generator as assignment_gen
 import agents.pi_generator as pi_gen
 import agents.pi_mapper as pi_map
+import agents.course_context as course_context
+import agents.historical_co_analyst as historical_co_analyst
+import agents.assessment_analyst as assessment_analyst
+import agents.attainment_analyst as attainment_analyst
 from tools.syllabus_reader import load_syllabus
 from tools.pdf_generator import generate_pdf_report
 from tools.assignment_pdf_generator import generate_assignment_pdf
-from tools.llm_client import call_llm
+from tools.analysis_pdf_generator import generate_analysis_pdf
+from tools.llm_client import call_llm, call_llm_json
 
 app = FastAPI(title="Multi-Agent CO-PO ERP Platform Backend")
 
@@ -74,7 +79,23 @@ def save_subject_state(state: AgentState):
             "mapping_validation_feedback": state.mapping_validation_feedback,
             "students": state.students,
             "max_marks": state.max_marks,
+            "ia_students": state.ia_students,
+            "ia_max_marks": state.ia_max_marks,
+            "mse_students": state.mse_students,
+            "mse_max_marks": state.mse_max_marks,
+            "ese_students": state.ese_students,
+            "ese_max_marks": state.ese_max_marks,
             "assignment": state.assignment.model_dump() if state.assignment else None,
+            "semester": state.semester,
+            "course_description_option": state.course_description_option,
+            "course_description_text": state.course_description_text,
+            "course_context_data": state.course_context_data,
+            "previous_cos_option": state.previous_cos_option,
+            "previous_cos_raw": state.previous_cos_raw,
+            "previous_cos": [co.model_dump() for co in state.previous_cos] if state.previous_cos else [],
+            "previous_attainment_analysis": state.previous_attainment_analysis,
+            "assessment_analysis": state.assessment_analysis,
+            "new_generated_cos": [co.model_dump() for co in state.new_generated_cos] if state.new_generated_cos else [],
         }
         database.save_subject_state(state.subject_name, state.year, data)
     except Exception as e:
@@ -91,11 +112,13 @@ def align_co_ids(state: AgentState):
     if state.co_attainment:
         for att in state.co_attainment:
             current_ids.add(att.co_id)
-    if state.students:
-        for stud in state.students:
-            current_ids.update(stud.get("marks", {}).keys())
-    if state.max_marks:
-        current_ids.update(state.max_marks.keys())
+    for roster in [state.students, state.ia_students, state.mse_students, state.ese_students]:
+        if roster:
+            for stud in roster:
+                current_ids.update(stud.get("marks", {}).keys())
+    for mm in [state.max_marks, state.ia_max_marks, state.mse_max_marks, state.ese_max_marks]:
+        if mm:
+            current_ids.update(mm.keys())
         
     def get_matching_co(co_id_str: str, cos: list) -> Optional[str]:
         cleaned_target = "".join(c for c in co_id_str if c.isalnum()).upper()
@@ -116,23 +139,78 @@ def align_co_ids(state: AgentState):
             if att.co_id in co_id_map:
                 att.co_id = co_id_map[att.co_id]
                 
-    # 3. Update state.students
-    if state.students:
-        for stud in state.students:
-            marks = stud.get("marks", {})
-            new_marks = {}
-            for k, v in marks.items():
+    # 3. Update component lists and dicts
+    for attr_students, attr_max in [
+        ("students", "max_marks"),
+        ("ia_students", "ia_max_marks"),
+        ("mse_students", "mse_max_marks"),
+        ("ese_students", "ese_max_marks")
+    ]:
+        students_list = getattr(state, attr_students, [])
+        if students_list:
+            for stud in students_list:
+                marks = stud.get("marks", {})
+                new_marks = {}
+                for k, v in marks.items():
+                    new_key = co_id_map.get(k, k)
+                    new_marks[new_key] = v
+                stud["marks"] = new_marks
+        max_dict = getattr(state, attr_max, {})
+        if max_dict:
+            new_max = {}
+            for k, v in max_dict.items():
                 new_key = co_id_map.get(k, k)
-                new_marks[new_key] = v
-            stud["marks"] = new_marks
+                new_max[new_key] = v
+            setattr(state, attr_max, new_max)
+
+def validate_and_correct_mappings(state: AgentState) -> bool:
+    """
+    Validates CO-PO mapping strengths against underlying PI coverage percentages.
+    If a contradiction is found, prints a console warning and corrects the strength.
+    Returns True if any changes were made, False otherwise.
+    """
+    if not state.co_po_mapping or not state.pi_mappings or not state.performance_indicators:
+        return False
+        
+    has_changes = False
+    for entry in state.co_po_mapping:
+        # Find all PIs belonging to this PO
+        po_pis = [pi for pi in state.performance_indicators if pi.po_id == entry.po_id]
+        total_pis = len(po_pis)
+        
+        if total_pis == 0:
+            expected_strength = 0
+            pct_rounded = 0
+            mapped_count = 0
+        else:
+            mapped_pis = []
+            for pi in po_pis:
+                m = next((x for x in state.pi_mappings if x.co_id == entry.co_id and x.pi_id == pi.pi_id), None)
+                if m and m.mapped == "Y":
+                    mapped_pis.append(pi)
+            mapped_count = len(mapped_pis)
+            pct_rounded = round((mapped_count / total_pis) * 100)
             
-    # 4. Update state.max_marks
-    if state.max_marks:
-        new_max_marks = {}
-        for k, v in state.max_marks.items():
-            new_key = co_id_map.get(k, k)
-            new_max_marks[new_key] = v
-        state.max_marks = new_max_marks
+            if mapped_count == 0:
+                expected_strength = 0
+            elif pct_rounded <= 33:
+                expected_strength = 1
+            elif pct_rounded <= 66:
+                expected_strength = 2
+            else:
+                expected_strength = 3
+                
+        if entry.strength != expected_strength:
+            print(f"[WARNING] Articulation contradiction detected in subject '{state.subject_name}': {entry.co_id} -> {entry.po_id} has strength {entry.strength} but PI coverage is {mapped_count}/{total_pis} ({pct_rounded}%) (expected {expected_strength}). Recalculating/updating value.")
+            entry.strength = expected_strength
+            # Optionally update reasoning if strength changes
+            if expected_strength == 0:
+                entry.reasoning = f"- **Reason for No Mapping**: No performance indicators are mapped between {entry.co_id} and PIs under {entry.po_id}.\n- **Suggested Activities**: None.\n- **Suggested Assignments**: None.\n- **Suggested Assessments**: None.\n- **Syllabus Recommendations**: None."
+            else:
+                entry.reasoning = f"- **Semantic Alignment**: Aligned mathematically.\n- **Competency & PI Coverage**: Maps to PIs: {', '.join([p.pi_id for p in mapped_pis])}. Mathematical coverage is {pct_rounded}% (Level {expected_strength} mapping).\n- **Academic Evidence Support**: Alignment derived from PI mapping analysis.\n- **Bloom's Level Compatibility**: Levels compatible."
+            has_changes = True
+            
+    return has_changes
 
 def ensure_pos_and_mappings(state: AgentState):
     has_changes = False
@@ -177,8 +255,8 @@ def ensure_pos_and_mappings(state: AgentState):
         except Exception as e:
             print(f"Error self-healing CO-PO mappings: {e}")
 
-    # Self-heal performance indicators if empty and department is set
-    if not state.performance_indicators and state.department:
+    # Self-heal performance indicators if empty, department is set, and vision_mission is set
+    if not state.performance_indicators and state.department and state.vision_mission.strip():
         try:
             pi_gen.run(state)
             has_changes = True
@@ -188,6 +266,10 @@ def ensure_pos_and_mappings(state: AgentState):
     # Align CO IDs
     align_co_ids(state)
     
+    # Validation check & auto-correction: Ensure CO-PO mappings are consistent with PI coverage
+    if validate_and_correct_mappings(state):
+        has_changes = True
+        
     if has_changes:
         save_subject_state(state)
 
@@ -276,9 +358,27 @@ def load_all_subjects():
                 state.mapping_validation_feedback = data.get("mapping_validation_feedback", "")
                 state.students = data.get("students", [])
                 state.max_marks = data.get("max_marks", {})
+                state.ia_students = data.get("ia_students", [])
+                state.ia_max_marks = data.get("ia_max_marks", {})
+                state.mse_students = data.get("mse_students", [])
+                state.mse_max_marks = data.get("mse_max_marks", {})
+                state.ese_students = data.get("ese_students", [])
+                state.ese_max_marks = data.get("ese_max_marks", {})
                 assignment_data = data.get("assignment", None)
                 state.assignment = Assignment(**assignment_data) if assignment_data else None
                 
+                # Deserialization of redesigned CO workflow state
+                state.semester = data.get("semester", "")
+                state.course_description_option = data.get("course_description_option", "")
+                state.course_description_text = data.get("course_description_text", "")
+                state.course_context_data = data.get("course_context_data", {})
+                state.previous_cos_option = data.get("previous_cos_option", "")
+                state.previous_cos_raw = data.get("previous_cos_raw", "")
+                state.previous_cos = [CourseOutcome(**co) for co in data.get("previous_cos", [])] if data.get("previous_cos") else []
+                state.previous_attainment_analysis = data.get("previous_attainment_analysis", {})
+                state.assessment_analysis = data.get("assessment_analysis", {})
+                state.new_generated_cos = [CourseOutcome(**co) for co in data.get("new_generated_cos", [])] if data.get("new_generated_cos") else []
+
                 subjects[state.subject_name] = state
                 
                 # Auto-heal loaded subject states
@@ -331,6 +431,7 @@ class PiSuggestRequest(BaseModel):
 class SubjectCreateRequest(BaseModel):
     subject_name: str
     year: str
+    semester: Optional[str] = None
 
 class ActiveSubjectRequest(BaseModel):
     subject_id: str
@@ -383,6 +484,7 @@ async def list_subjects():
         {
             "subject_name": s.subject_name,
             "year": s.year,
+            "semester": s.semester or "",
             "has_syllabus": bool(s.syllabus_text),
             "has_cos": len(s.cos) > 0,
             "has_mappings": len(s.co_po_mapping) > 0,
@@ -405,6 +507,8 @@ async def create_subject(req: SubjectCreateRequest):
     state = AgentState()
     state.subject_name = req.subject_name
     state.year = req.year
+    if req.semester:
+        state.semester = req.semester
     subjects[req.subject_name] = state
     global active_subject_id
     active_subject_id = req.subject_name
@@ -550,6 +654,7 @@ async def get_state(x_subject_id: Optional[str] = Header(None)):
         return {
             "subject_name": state.subject_name,
             "year": state.year,
+            "semester": state.semester,
             "syllabus_text": state.syllabus_text,
             "department": state.department,
             "vision_mission": state.vision_mission,
@@ -567,9 +672,26 @@ async def get_state(x_subject_id: Optional[str] = Header(None)):
             "teaching_philosophy": state.teaching_philosophy,
             "recommendations": [r.model_dump() for r in state.recommendations],
             "audit_trail": state.audit_trail,
+            "co_validation_feedback": state.co_validation_feedback,
+            "mapping_validation_feedback": state.mapping_validation_feedback,
             "students": state.students,
             "max_marks": state.max_marks,
+            "ia_students": state.ia_students,
+            "ia_max_marks": state.ia_max_marks,
+            "mse_students": state.mse_students,
+            "mse_max_marks": state.mse_max_marks,
+            "ese_students": state.ese_students,
+            "ese_max_marks": state.ese_max_marks,
             "assignment": state.assignment.model_dump() if state.assignment else None,
+            "previous_attainment_analysis": state.previous_attainment_analysis,
+            "assessment_analysis": state.assessment_analysis,
+            "course_description_option": state.course_description_option,
+            "course_description_text": state.course_description_text,
+            "course_context_data": state.course_context_data,
+            "previous_cos_option": state.previous_cos_option,
+            "previous_cos_raw": state.previous_cos_raw,
+            "previous_cos": [co.model_dump() for co in state.previous_cos] if state.previous_cos else [],
+            "new_generated_cos": [co.model_dump() for co in state.new_generated_cos] if state.new_generated_cos else [],
             "summary": state.summary()
         }
     except Exception as e:
@@ -714,8 +836,17 @@ async def get_mappings(x_subject_id: Optional[str] = Header(None)):
     if state.co_po_mapping:
         _, report = map_val.run(state)
         passed, issues, suggestions = report.passed, report.issues, report.suggestions
+    
+    pi_coverage = po_map.calculate_pi_coverage(state)
+    
     return {
         "mappings": [m.model_dump() for m in state.co_po_mapping],
+        "pi_mappings": [m.model_dump() for m in state.pi_mappings],
+        "pi_coverage_analytics": pi_coverage,
+        "evidence_analysis_report": {
+            "attainment": state.previous_attainment_analysis,
+            "assessment": state.assessment_analysis
+        },
         "validation": {
             "passed": passed,
             "issues": issues,
@@ -731,11 +862,23 @@ async def generate_mappings(x_subject_id: Optional[str] = Header(None)):
     if not state.cos or not state.pos:
         raise HTTPException(status_code=400, detail="Cannot generate mapping without finalized COs and POs")
     try:
+        # Chain mapping workflow: CO-PI mapping first, then Articulation mapping
+        pi_map.run(state)
         po_map.run(state)
+        
         _, report = map_val.run(state)
         save_subject_state(state)
+        
+        pi_coverage = po_map.calculate_pi_coverage(state)
+        
         return {
             "mappings": [m.model_dump() for m in state.co_po_mapping],
+            "pi_mappings": [m.model_dump() for m in state.pi_mappings],
+            "pi_coverage_analytics": pi_coverage,
+            "evidence_analysis_report": {
+                "attainment": state.previous_attainment_analysis,
+                "assessment": state.assessment_analysis
+            },
             "validation": {
                 "passed": report.passed,
                 "issues": report.issues,
@@ -752,11 +895,24 @@ async def update_mappings(req: MappingUpdateRequest, x_subject_id: Optional[str]
         raise HTTPException(status_code=403, detail="CO-PO mapping is locked. Unlock it before making changes.")
     state.co_po_mapping = req.mappings
     state.log("System", "mappings_update", "Manually updated CO-PO mappings")
+    
+    # Validate and auto-correct any contradictions in the manually updated mappings
+    validate_and_correct_mappings(state)
+    
     _, report = map_val.run(state)
     save_subject_state(state)
+    
+    pi_coverage = po_map.calculate_pi_coverage(state)
+    
     return {
         "success": True,
         "mappings": [m.model_dump() for m in state.co_po_mapping],
+        "pi_mappings": [m.model_dump() for m in state.pi_mappings],
+        "pi_coverage_analytics": pi_coverage,
+        "evidence_analysis_report": {
+            "attainment": state.previous_attainment_analysis,
+            "assessment": state.assessment_analysis
+        },
         "validation": {
             "passed": report.passed,
             "issues": report.issues,
@@ -783,6 +939,61 @@ async def unlock_mappings(x_subject_id: Optional[str] = Header(None)):
     state.log("System", "mapping_unlock", "CO-PO mapping matrix has been unlocked.")
     save_subject_state(state)
     return {"success": True, "mapping_locked": False}
+
+@app.post("/api/mappings/recalculate")
+async def recalculate_mappings(x_subject_id: Optional[str] = Header(None)):
+    """
+    Force-recalculates ALL CO-PO articulation strengths mathematically from current PI mappings.
+    This corrects any stale or inconsistent strength values (e.g. LLM-generated strengths that
+    contradict the actual PI coverage evidence).
+    
+    Thresholds applied:
+      0% PI coverage       → strength 0 (no mapping, shown as '–')
+      1%  – 33% coverage   → strength 1 (Level 1)
+      34% – 66% coverage   → strength 2 (Level 2)
+      67% – 100% coverage  → strength 3 (Level 3)
+    """
+    state = get_subject_state(x_subject_id)
+    if not state.cos or not state.pos:
+        raise HTTPException(status_code=400, detail="Cannot recalculate without COs and POs configured.")
+    if not state.pi_mappings and not state.performance_indicators:
+        raise HTTPException(status_code=400, detail="Cannot recalculate without PI data. Please generate PI mappings first.")
+    
+    try:
+        corrections = 0
+        before_strengths = {(m.co_id, m.po_id): m.strength for m in state.co_po_mapping}
+        
+        # Use the mathematical recalculation function from po_mapper
+        po_map.recalculate_strengths_mathematically(state)
+        
+        # Count corrections
+        for m in state.co_po_mapping:
+            old = before_strengths.get((m.co_id, m.po_id))
+            if old is not None and old != m.strength:
+                corrections += 1
+                print(f"[RECALCULATE] Corrected {m.co_id}→{m.po_id}: {old} → {m.strength}")
+        
+        state.log("System", "mappings_recalculate",
+                  f"Force-recalculated CO-PO articulation matrix from PI coverage data. {corrections} cell(s) corrected.")
+        save_subject_state(state)
+        
+        pi_coverage = po_map.calculate_pi_coverage(state)
+        _, report = map_val.run(state)
+        
+        return {
+            "success": True,
+            "corrections": corrections,
+            "mappings": [m.model_dump() for m in state.co_po_mapping],
+            "pi_mappings": [m.model_dump() for m in state.pi_mappings],
+            "pi_coverage_analytics": pi_coverage,
+            "validation": {
+                "passed": report.passed,
+                "issues": report.issues,
+                "suggestions": report.suggestions
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/department/setup")
 async def setup_department(
@@ -823,14 +1034,22 @@ async def setup_department(
 async def generate_pi_mappings(x_subject_id: Optional[str] = Header(None)):
     state = get_subject_state(x_subject_id)
     try:
-        # PI mapping runs independently — does NOT affect CO-PO articulation matrix
+        # Chain generation: generate PI mapping first, then mathematically update CO-PO articulation matrix
         pi_map.run(state)
+        po_map.run(state)
         save_subject_state(state)
+        
+        pi_coverage = po_map.calculate_pi_coverage(state)
+        
         return {
             "success": True,
             "pi_mappings": [m.model_dump() for m in state.pi_mappings],
-            # Return the existing LLM-based CO-PO matrix (unchanged)
-            "mappings": [m.model_dump() for m in state.co_po_mapping]
+            "mappings": [m.model_dump() for m in state.co_po_mapping],
+            "pi_coverage_analytics": pi_coverage,
+            "evidence_analysis_report": {
+                "attainment": state.previous_attainment_analysis,
+                "assessment": state.assessment_analysis
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -839,15 +1058,23 @@ async def generate_pi_mappings(x_subject_id: Optional[str] = Header(None)):
 async def update_pi_mappings(req: PiMappingUpdateRequest, x_subject_id: Optional[str] = Header(None)):
     state = get_subject_state(x_subject_id)
     try:
-        # Only update PI mappings — CO-PO articulation matrix remains unchanged (LLM-based)
+        # Update PI mappings and mathematically recalculate CO-PO articulation matrix
         state.pi_mappings = req.mappings
-        state.log("System", "pi_mappings_update", "Manually updated PI mappings (accreditation support layer only)")
+        po_map.recalculate_strengths_mathematically(state)
+        state.log("System", "pi_mappings_update", "Manually updated PI mappings and recalculated CO-PO articulation matrix")
         save_subject_state(state)
+        
+        pi_coverage = po_map.calculate_pi_coverage(state)
+        
         return {
             "success": True,
             "pi_mappings": [m.model_dump() for m in state.pi_mappings],
-            # Return the existing LLM-based CO-PO matrix (unchanged)
-            "mappings": [m.model_dump() for m in state.co_po_mapping]
+            "mappings": [m.model_dump() for m in state.co_po_mapping],
+            "pi_coverage_analytics": pi_coverage,
+            "evidence_analysis_report": {
+                "attainment": state.previous_attainment_analysis,
+                "assessment": state.assessment_analysis
+            }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -900,18 +1127,28 @@ async def generate_philosophy(x_subject_id: Optional[str] = Header(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/attainment/upload-marks")
-async def upload_marks(marks_file: UploadFile = File(...), x_subject_id: Optional[str] = Header(None)):
+async def upload_marks(
+    assessment_type: str = Form(...),
+    marks_file: UploadFile = File(...),
+    co_targets: Optional[str] = Form(None),
+    x_subject_id: Optional[str] = Header(None)
+):
     state = get_subject_state(x_subject_id)
     ensure_pos_and_mappings(state)
     try:
+        # Parse and save custom CO targets if provided
+        if co_targets:
+            import json
+            targets_dict = json.loads(co_targets)
+            for co in state.cos:
+                if co.co_id in targets_dict:
+                    co.target_attainment = float(targets_dict[co.co_id])
+
         os.makedirs("data/students", exist_ok=True)
-        csv_path = f"data/students/{marks_file.filename}"
+        csv_path = f"data/students/{assessment_type}_{marks_file.filename}"
         with open(csv_path, "wb") as f:
             shutil.copyfileobj(marks_file.file, f)
             
-        # Run attainment calculations
-        co_att.run(state, csv_path)
-        
         # Read the student details from uploaded CSV to display in student management table
         import pandas as pd
         df = pd.read_csv(csv_path)
@@ -945,12 +1182,27 @@ async def upload_marks(marks_file: UploadFile = File(...), x_subject_id: Optiona
                     stud["marks"][col.upper()] = float(row[col])
             students_list.append(stud)
             
-        state.students = students_list
-        state.max_marks = max_marks
+        atype = assessment_type.upper()
+        if atype == "IA":
+            state.ia_students = students_list
+            state.ia_max_marks = max_marks
+        elif atype == "MSE":
+            state.mse_students = students_list
+            state.mse_max_marks = max_marks
+        elif atype == "ESE":
+            state.ese_students = students_list
+            state.ese_max_marks = max_marks
+
+        # Backwards compatible state sync
+        state.students = state.ese_students or state.ia_students or state.mse_students
+        state.max_marks = state.ese_max_marks or state.ia_max_marks or state.mse_max_marks
 
         # Align CO IDs
         align_co_ids(state)
 
+        # Run attainment calculations
+        co_att.recalculate_attainment(state)
+        
         # Run PO attainment calculations
         po_att.run(state)
 
@@ -960,7 +1212,13 @@ async def upload_marks(marks_file: UploadFile = File(...), x_subject_id: Optiona
             "co_attainment": [a.model_dump() for a in state.co_attainment],
             "po_attainment": [a.model_dump() for a in state.po_attainment],
             "students": state.students,
-            "max_marks": state.max_marks
+            "max_marks": state.max_marks,
+            "ia_students": state.ia_students,
+            "ia_max_marks": state.ia_max_marks,
+            "mse_students": state.mse_students,
+            "mse_max_marks": state.mse_max_marks,
+            "ese_students": state.ese_students,
+            "ese_max_marks": state.ese_max_marks
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -972,6 +1230,89 @@ async def get_attainment(x_subject_id: Optional[str] = Header(None)):
         "co_attainment": [a.model_dump() for a in state.co_attainment],
         "po_attainment": [a.model_dump() for a in state.po_attainment]
     }
+
+class ManualAttainmentItem(BaseModel):
+    co_id: str
+    ia_percentage: Optional[float] = None
+    mse_percentage: Optional[float] = None
+    ese_percentage: Optional[float] = None
+
+class ManualAttainmentRequest(BaseModel):
+    attainments: List[ManualAttainmentItem]
+    co_targets: Optional[Dict[str, float]] = None
+
+@app.post("/api/attainment/manual-input")
+async def save_manual_attainment(req: ManualAttainmentRequest, x_subject_id: Optional[str] = Header(None)):
+    state = get_subject_state(x_subject_id)
+    ensure_pos_and_mappings(state)
+    try:
+        # Parse and save custom CO targets if provided
+        if req.co_targets:
+            for co in state.cos:
+                if co.co_id in req.co_targets:
+                    co.target_attainment = req.co_targets[co.co_id]
+
+        # Initialize temporary attainment list with manual percentages
+        results = []
+        for item in req.attainments:
+            results.append(COAttainment(
+                co_id=item.co_id,
+                ia_percentage=item.ia_percentage,
+                ia_level=None,
+                mse_percentage=item.mse_percentage,
+                mse_level=None,
+                cie_percentage=None,
+                cie_level=None,
+                ese_percentage=item.ese_percentage,
+                ese_level=None,
+                avg_percentage=0.0,
+                achieved_level=0.0,
+                threshold_used={}
+            ))
+            
+        state.co_attainment = results
+        
+        # Clear student lists and marks since we are doing manual input overrides
+        state.students = []
+        state.max_marks = {}
+        state.ia_students = []
+        state.ia_max_marks = {}
+        state.mse_students = []
+        state.mse_max_marks = {}
+        state.ese_students = []
+        state.ese_max_marks = {}
+        
+        # Recalculate using unified attainment agent
+        co_att.recalculate_attainment(state)
+        
+        # Run PO attainment calculations
+        po_att.run(state)
+        
+        save_subject_state(state)
+        return {
+            "success": True,
+            "co_attainment": [a.model_dump() for a in state.co_attainment],
+            "po_attainment": [a.model_dump() for a in state.po_attainment]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/attainment/clear")
+async def clear_attainment(x_subject_id: Optional[str] = Header(None)):
+    state = get_subject_state(x_subject_id)
+    state.co_attainment = []
+    state.po_attainment = []
+    state.students = []
+    state.max_marks = {}
+    state.ia_students = []
+    state.ia_max_marks = {}
+    state.mse_students = []
+    state.mse_max_marks = {}
+    state.ese_students = []
+    state.ese_max_marks = {}
+    state.log("System", "attainment_clear", "Cleared student marks and attainment calculations")
+    save_subject_state(state)
+    return {"success": True}
 
 @app.get("/api/recommendations")
 async def get_recommendations(x_subject_id: Optional[str] = Header(None)):
@@ -1021,6 +1362,24 @@ async def get_pdf_report(x_subject_id: Optional[str] = Header(None)):
         save_subject_state(state)
         return FileResponse(path, filename=os.path.basename(path), media_type="application/pdf")
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/analysis/pdf")
+async def get_analysis_pdf(x_subject_id: Optional[str] = Header(None)):
+    state = get_subject_state(x_subject_id)
+    if not state.co_attainment:
+        raise HTTPException(status_code=400, detail="No attainment data calculated yet.")
+    try:
+        os.makedirs("data/output", exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+        safe_name = (state.subject_name or "Course").replace(" ", "_")
+        path = f"data/output/{safe_name}_AnalysisDossier_{timestamp}.pdf"
+        
+        generate_analysis_pdf(state, path)
+        return FileResponse(path, filename=os.path.basename(path), media_type="application/pdf")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 class AssignmentGenerateRequest(BaseModel):
@@ -1313,24 +1672,265 @@ async def suggest_mapping_endpoint(req: SuggestMappingRequest, x_subject_id: Opt
             
         system = "You are an expert in Outcome-Based Education (OBE) and NBA accreditation. Your task is to recommend changes or additions in syllabus topics, pedagogical methods, or assessment questions to establish a meaningful alignment between a Course Outcome (CO) and a Program Outcome (PO)."
         
+        pis_under_po = [
+            {"pi_id": pi.pi_id, "pi_statement": pi.pi_statement}
+            for pi in state.performance_indicators if pi.po_id == po.po_id
+        ]
+        
         prompt = f"""
 Subject: {state.subject_name}
-Course Outcome: {co.co_id} - {co.statement}
+Course Outcome: {co.co_id} - {co.statement} (Bloom's Level: L{co.blooms_level})
 Program Outcome: {po.po_id} - {po.statement}
+Available PIs under {po.po_id}:
+{json.dumps(pis_under_po, indent=2)}
 
-Currently, there is no mapping between this CO and PO (strength is 0 or unmapped).
-Please provide:
-1. A clear diagnosis of why they don't map.
-2. Specific concrete changes to make (e.g. syllabus additions, practical topics, or assignments) that would justify a mapping (strength 1, 2, or 3).
-3. A suggested question, assessment, or activity that directly tests this connection.
+Currently, there is no mapping between this CO and PO.
+Please analyze the CO, PO, and the PIs, and return a JSON object with the following fields:
+1. "target_pi": Identify which specific Performance Indicator (PI) under {po.po_id} could be targeted to establish a map. Explain why.
+2. "activity_suggestions": A concrete active learning pedagogical activity or tutorial to build this skill.
+3. "assignment_suggestions": A specific assignment question or task.
+4. "assessment_suggestions": A test question or evaluation method.
+5. "reason_for_no_mapping": A brief academic reason why there is currently no mapping.
 
-Be extremely specific, professional, and concise. Make sure your suggestions are actionable.
+Return ONLY a valid JSON object. Do not include markdown wraps or code fences.
 """
-        recommendation = call_llm(prompt=prompt, system=system, expect_json=False)
-        return {"suggestion": recommendation}
+        result = call_llm_json(prompt=prompt, system=system, temperature=0)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# =====================================================
+# REDESIGNED CO WORKFLOW ENDPOINTS
+# =====================================================
+
+import config
+
+class AcademicSetupRequest(BaseModel):
+    department: str
+    year: str
+    semester: str
+    subject_name: str
+    vision_mission: Optional[str] = ""
+
+class FinalizeCosRequest(BaseModel):
+    cos: List[CourseOutcome]
+
+@app.get("/api/curriculum")
+async def get_curriculum():
+    return config.CURRICULUM
+
+@app.post("/api/workflow/academic-setup")
+async def workflow_academic_setup(req: AcademicSetupRequest):
+    global active_subject_id
+    subject_name = req.subject_name
+    
+    if subject_name not in subjects:
+        state = AgentState()
+        state.subject_name = subject_name
+        subjects[subject_name] = state
+    else:
+        state = subjects[subject_name]
+        
+    active_subject_id = subject_name
+    state.year = req.year
+    state.semester = req.semester
+    state.department = req.department
+    if req.vision_mission:
+        state.vision_mission = req.vision_mission.strip()
+    
+    # Auto-set thresholds from config defaults based on year
+    threshold_vals = config.ATTAINMENT_LEVELS.get(req.year, {1: 60, 2: 65, 3: 70})
+    state.update_thresholds(threshold_vals[1], threshold_vals[2], threshold_vals[3])
+    
+    state.log("System", "academic_setup", f"Selected {subject_name} for {req.department} ({req.year}, {req.semester})")
+    save_subject_state(state)
+    return {"success": True, "subject_id": subject_name}
+
+@app.post("/api/workflow/course-input")
+async def workflow_course_input(
+    option: str = Form(...),
+    text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    x_subject_id: Optional[str] = Header(None)
+):
+    state = get_subject_state(x_subject_id)
+    state.course_description_option = option
+    
+    desc_text = ""
+    if option in ["pdf", "txt"] and file:
+        os.makedirs("data/syllabus", exist_ok=True)
+        file_path = f"data/syllabus/workflow_{file.filename}"
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        desc_text = load_syllabus(file_path)
+    else:
+        desc_text = text or ""
+        
+    state.course_description_text = desc_text
+    state.syllabus_text = desc_text  # maintain backward compatibility
+    
+    # Run Course Context Agent
+    context_data = course_context.run(state)
+    save_subject_state(state)
+    return {
+        "success": True,
+        "description_length": len(desc_text),
+        "context_data": context_data
+    }
+
+@app.post("/api/workflow/previous-cos")
+async def workflow_previous_cos(
+    option: str = Form(...),
+    text: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    x_subject_id: Optional[str] = Header(None)
+):
+    state = get_subject_state(x_subject_id)
+    state.previous_cos_option = option
+    
+    raw_text = ""
+    if option == "upload" and file:
+        os.makedirs("data/syllabus", exist_ok=True)
+        file_path = f"data/syllabus/prev_co_{file.filename}"
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        raw_text = load_syllabus(file_path)
+    elif option == "paste":
+        raw_text = text or ""
+        
+    state.previous_cos_raw = raw_text
+    
+    # Run Historical CO Analyst Agent
+    parsed_cos = historical_co_analyst.run(state)
+    save_subject_state(state)
+    return {
+        "success": True,
+        "previous_cos": [co.model_dump() for co in parsed_cos]
+    }
+
+@app.post("/api/workflow/previous-performance")
+async def workflow_previous_performance(
+    x_subject_id: Optional[str] = Header(None),
+    request: Request = None
+):
+    state = get_subject_state(x_subject_id)
+    form = await request.form()
+    
+    # Extract multiple files
+    files = form.getlist("files")
+    types = form.getlist("types")
+    
+    raw_assessments_text = ""
+    marks_file_path = None
+    
+    os.makedirs("data/students", exist_ok=True)
+    os.makedirs("data/syllabus", exist_ok=True)
+    
+    uploaded_files = []
+    for i, file_item in enumerate(files):
+        if not file_item.filename:
+            continue
+        file_type = types[i] if i < len(types) else "ia_paper"
+        uploaded_files.append({
+            "filename": file_item.filename,
+            "type": file_type
+        })
+        
+        if file_type == "student_marks":
+            # Save marks CSV
+            marks_file_path = f"data/students/prev_marks_{file_item.filename}"
+            with open(marks_file_path, "wb") as f:
+                shutil.copyfileobj(file_item.file, f)
+        else:
+            # Save and extract question paper text
+            paper_path = f"data/syllabus/prev_assess_{file_item.filename}"
+            with open(paper_path, "wb") as f:
+                shutil.copyfileobj(file_item.file, f)
+            text_extracted = load_syllabus(paper_path)
+            raw_assessments_text += f"\n--- {file_type.upper()} ---\n" + text_extracted
+            
+    # Run Assessment Analyst Agent
+    assessment_analyst.run(state, raw_assessments_text)
+    
+    # Run Attainment Analyst Agent
+    attainment_analysis = attainment_analyst.run(state, marks_file_path, uploaded_files)
+    
+    save_subject_state(state)
+    return {
+        "success": True,
+        "assessment_analysis": state.assessment_analysis,
+        "attainment_analysis": attainment_analysis
+    }
+
+@app.post("/api/workflow/generate-cos")
+async def workflow_generate_cos(payload: dict, x_subject_id: Optional[str] = Header(None)):
+    state = get_subject_state(x_subject_id)
+    num_cos = payload.get("num_cos", 6)
+    feedback = payload.get("feedback", "")
+    
+    if feedback:
+        state.reflection_feedback = feedback
+        
+    try:
+        # Run Generation Agent
+        co_gen.run(state, num_cos)
+        
+        # Run Validation Agent
+        _, report = co_val.run(state)
+        state.co_validation_feedback = "\n".join(report.issues)
+        
+        # Run Recommendation Agent to establish recommendations for target COs
+        try:
+            if state.previous_attainment_analysis and "co_attainment" in state.previous_attainment_analysis:
+                mock_co_atts = []
+                for co_id, co_data in state.previous_attainment_analysis["co_attainment"].items():
+                    mock_co_atts.append(COAttainment(
+                        co_id=co_id,
+                        avg_percentage=co_data.get("percentage", 0),
+                        level_1_students_pct=0, level_2_students_pct=0, level_3_students_pct=0,
+                        achieved_level=co_data.get("achieved_level", 0),
+                        threshold_used={}
+                    ))
+                original_co_atts = state.co_attainment
+                state.co_attainment = mock_co_atts
+                rec.run(state)
+                state.co_attainment = original_co_atts
+            else:
+                rec.run(state)
+        except Exception as re_err:
+            print(f"Non-critical recommendation running error: {re_err}")
+            
+        save_subject_state(state)
+        return {
+            "success": True,
+            "cos": [co.model_dump() for co in state.new_generated_cos],
+            "validation": {
+                "passed": report.passed,
+                "issues": report.issues,
+                "suggestions": report.suggestions
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/workflow/finalize-cos")
+async def workflow_finalize_cos(req: FinalizeCosRequest, x_subject_id: Optional[str] = Header(None)):
+    state = get_subject_state(x_subject_id)
+    state.cos = req.cos
+    for co in state.cos:
+        co.validation_status = "approved"
+    
+    # Auto-initialize default Program Outcomes (POs) and generate mappings for the finalized subject
+    ensure_pos_and_mappings(state)
+    
+    state.log("System", "workflow_finalize_cos", f"Finalized and approved set of {len(state.cos)} Course Outcomes.")
+    save_subject_state(state)
+    return {
+        "success": True,
+        "cos": [co.model_dump() for co in state.cos]
+    }
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+

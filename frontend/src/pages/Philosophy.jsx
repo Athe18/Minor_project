@@ -2,16 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { philosophyAPI } from '../api';
 import { Sparkles, Copy, Check, RefreshCw, AlertTriangle, GraduationCap } from 'lucide-react';
 
-export default function Philosophy({ courseState, refreshState }) {
+export default function Philosophy({ courseState, refreshState, activeSubjectId }) {
   const [philosophy, setPhilosophy] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    if (courseState?.teaching_philosophy) {
-      setPhilosophy(courseState.teaching_philosophy);
+    if (courseState && courseState.subject_name === activeSubjectId) {
+      setPhilosophy(courseState.teaching_philosophy || '');
     }
-  }, [courseState]);
+  }, [courseState, activeSubjectId]);
 
   const handleGenerate = async () => {
     setLoading(true);

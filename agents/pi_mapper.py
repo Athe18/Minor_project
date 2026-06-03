@@ -167,17 +167,15 @@ def calculate_po_co_strengths(state: AgentState):
             mapped_count = len(mapped_pis)
             percentage = (mapped_count / total_pis) * 100
             
-            # Determine strength using count-aware NBA thresholds
+            # Determine strength using mathematical thresholds consistently across the system
             if mapped_count == 0:
                 strength = 0
-            elif mapped_count >= total_pis or percentage >= 40.0:
-                # All PIs covered, or strong majority (≥40%) → Strong
-                strength = 3
-            elif percentage >= 20.0:
+            elif percentage < 34.0:
+                strength = 1
+            elif percentage < 67.0:
                 strength = 2
             else:
-                # At least 1 PI is mapped but below 20%
-                strength = 1
+                strength = 3
                 
             # Create a nice descriptive reasoning
             if strength > 0:

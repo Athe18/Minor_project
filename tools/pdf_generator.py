@@ -89,6 +89,45 @@ def generate_pdf_report(state: AgentState, output_path: str):
         parent=table_cell_style,
         alignment=1
     )
+    
+    table_header_style_small = ParagraphStyle(
+        'TableHeaderSmall',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=6.5,
+        textColor=colors.white,
+        alignment=1,
+        leading=8
+    )
+
+    table_cell_style_small = ParagraphStyle(
+        'TableCellSmall',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=6.5,
+        leading=8
+    )
+
+    table_cell_center_small = ParagraphStyle(
+        'TableCellCenterSmall',
+        parent=table_cell_style_small,
+        alignment=1
+    )
+
+    table_cell_bold_center_small = ParagraphStyle(
+        'TableCellBoldCenterSmall',
+        parent=table_cell_style_small,
+        fontName='Helvetica-Bold',
+        alignment=1
+    )
+
+    table_cell_bold_center_dark = ParagraphStyle(
+        'TableCellBoldCenterDark',
+        parent=table_cell_style_small,
+        fontName='Helvetica-Bold',
+        textColor=colors.HexColor('#1F3864'),
+        alignment=1
+    )
 
     story = []
 
@@ -303,25 +342,147 @@ def generate_pdf_report(state: AgentState, output_path: str):
     if not state.co_attainment:
         story.append(Paragraph("No CO attainment calculated. Marks file not uploaded yet.", body_style))
     else:
-        co_att_headers = ["CO ID", "Average Marks %", "Students >= L1 %", "Students >= L2 %", "Students >= L3 %", "Attainment Level"]
-        co_att_rows = [[Paragraph(f"<b>{h}</b>", table_header_style) for h in co_att_headers]]
-        for a in state.co_attainment:
-            co_att_rows.append([
-                Paragraph(a.co_id, table_cell_center),
-                Paragraph(f"{a.avg_percentage}%", table_cell_center),
-                Paragraph(f"{a.level_1_students_pct}%", table_cell_center),
-                Paragraph(f"{a.level_2_students_pct}%", table_cell_center),
-                Paragraph(f"{a.level_3_students_pct}%", table_cell_center),
-                Paragraph(f"Level {a.achieved_level}" if a.achieved_level > 0 else "Not Achieved", table_cell_center)
-            ])
-        co_att_table = Table(co_att_rows, colWidths=[60, 90, 95, 95, 95, 95])
-        co_att_table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#6A2B6A')), # Dark Purple
-            ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')),
-            ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9F9F9')]),
-            ('PADDING', (0,0), (-1,-1), 6),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ]))
+        ia_max = next(iter(state.ia_max_marks.values()), 30.0) if state.ia_max_marks else 30.0
+        mse_max = next(iter(state.mse_max_marks.values()), 20.0) if state.mse_max_marks else 20.0
+        cie_max = ia_max + mse_max
+        ese_max = next(iter(state.ese_max_marks.values()), 50.0) if state.ese_max_marks else 50.0
+        total_max = cie_max + ese_max
+
+        header_row0 = [
+            Paragraph("<b>Sr. NO.</b>", table_header_style_small),
+            Paragraph("<b>CO</b>", table_header_style_small),
+            Paragraph("<b>COURSE OUTCOMES</b>", table_header_style_small),
+            Paragraph("<b>REVISED BLOOMS LEVEL</b>", table_header_style_small),
+            Paragraph("<b>TARGET FOR COs %</b>", table_header_style_small),
+            Paragraph("<b>CIE ASSESSMENT</b>", table_header_style_small),
+            "", "", "",
+            Paragraph("<b>ESE ASSESSMENT</b>", table_header_style_small),
+            "",
+            Paragraph("<b>AVERAGE ACHIEVED</b>", table_header_style_small),
+            Paragraph("<b>ATTAINMENT LEVEL</b>", table_header_style_small)
+        ]
+
+        header_row1 = [
+            "", "", "", "", "",
+            Paragraph("<b>IA</b>", table_header_style_small),
+            Paragraph("<b>MSE</b>", table_header_style_small),
+            Paragraph("<b>TOTAL</b>", table_header_style_small),
+            Paragraph("<b>ATTAINMENT LEVEL</b>", table_header_style_small),
+            Paragraph("<b>ESE</b>", table_header_style_small),
+            Paragraph("<b>ATTAINMENT LEVEL</b>", table_header_style_small),
+            "",
+            ""
+        ]
+
+        header_row2 = [
+            "", "", "", "", "",
+            Paragraph(f"<b>{ia_max:.0f}</b>", table_cell_bold_center_dark),
+            Paragraph(f"<b>{mse_max:.0f}</b>", table_cell_bold_center_dark),
+            Paragraph(f"<b>{cie_max:.0f}</b>", table_cell_bold_center_dark),
+            "",
+            Paragraph(f"<b>{ese_max:.0f}</b>", table_cell_bold_center_dark),
+            "",
+            Paragraph(f"<b>{total_max:.0f}</b>", table_cell_bold_center_dark),
+            ""
+        ]
+
+        co_map = {co.co_id: co for co in state.cos}
+        att_lookup = {a.co_id: a for a in state.co_attainment}
+        active_cos = [co for co in state.cos if co.statement and co.statement.strip()]
+
+        co_att_rows = [header_row0, header_row1, header_row2]
+
+        def fmt_pct(val):
+            return f"{val:.2f}" if val is not None else ""
+
+        def fmt_lvl(val):
+            return f"{val:.2f}" if val is not None else ""
+
+        for idx, co in enumerate(state.cos):
+            att = att_lookup.get(co.co_id)
+            is_active = bool(co.statement and co.statement.strip())
+            
+            row = [
+                Paragraph(str(idx + 1), table_cell_center_small),
+                Paragraph(co.co_id, table_cell_center_small),
+                Paragraph(co.statement if is_active else "", table_cell_style_small),
+                Paragraph(f"Level {co.blooms_level}" if (is_active and co.blooms_level) else ("Level 3" if is_active else "0"), table_cell_center_small),
+                Paragraph(str(co.target_attainment if co.target_attainment is not None else (state.level1_threshold or 60.0)) if is_active else "0", table_cell_center_small)
+            ]
+            
+            if is_active and att:
+                row.extend([
+                    Paragraph(fmt_pct(att.ia_percentage), table_cell_center_small),
+                    Paragraph(fmt_pct(att.mse_percentage), table_cell_center_small),
+                    Paragraph(fmt_pct(att.cie_percentage), table_cell_center_small),
+                    Paragraph(fmt_lvl(att.cie_level), table_cell_center_small),
+                    Paragraph(fmt_pct(att.ese_percentage), table_cell_center_small),
+                    Paragraph(fmt_lvl(att.ese_level), table_cell_center_small),
+                    Paragraph(fmt_pct(att.avg_percentage), table_cell_center_small),
+                    Paragraph(fmt_lvl(att.achieved_level), table_cell_center_small)
+                ])
+            else:
+                row.extend(["", "", "", "", "", "", "", ""])
+                
+            co_att_rows.append(row)
+
+        avg_row_idx = len(co_att_rows)
+        active_atts = [att_lookup[co.co_id] for co in active_cos if co.co_id in att_lookup]
+
+        def get_avg_str(extractor):
+            vals = [extractor(a) for a in active_atts if extractor(a) is not None]
+            return f"{sum(vals) / len(vals):.2f}" if vals else ""
+
+        avg_target = round(sum(co.target_attainment if co.target_attainment is not None else (state.level1_threshold or 60.0) for co in state.cos) / len(state.cos)) if state.cos else 0
+
+        avg_row = [
+            Paragraph("<b>Average</b>", table_cell_bold_center_small),
+            "", "", "",
+            Paragraph(f"<b>{avg_target}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.ia_percentage)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.mse_percentage)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.cie_percentage)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.cie_level)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.ese_percentage)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.ese_level)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.avg_percentage)}</b>", table_cell_bold_center_small),
+            Paragraph(f"<b>{get_avg_str(lambda a: a.achieved_level)}</b>", table_cell_bold_center_small)
+        ]
+        co_att_rows.append(avg_row)
+
+        co_att_table = Table(co_att_rows, colWidths=[18, 22, 172, 36, 32, 28, 28, 30, 36, 28, 36, 32, 34])
+        
+        table_style_list = [
+            ('BACKGROUND', (0, 0), (-1, 1), colors.HexColor('#6A2B6A')),
+            ('TEXTCOLOR', (0, 0), (-1, 1), colors.white),
+            ('BACKGROUND', (0, 2), (-1, 2), colors.HexColor('#F2F2F2')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CCCCCC')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('SPAN', (0, 0), (0, 2)),
+            ('SPAN', (1, 0), (1, 2)),
+            ('SPAN', (2, 0), (2, 2)),
+            ('SPAN', (3, 0), (3, 2)),
+            ('SPAN', (4, 0), (4, 2)),
+            ('SPAN', (5, 0), (8, 0)),
+            ('SPAN', (9, 0), (10, 0)),
+            ('SPAN', (11, 0), (11, 1)),
+            ('SPAN', (12, 0), (12, 2)),
+            ('SPAN', (8, 1), (8, 2)),
+            ('SPAN', (10, 1), (10, 2)),
+            ('SPAN', (0, avg_row_idx), (3, avg_row_idx)),
+            ('BACKGROUND', (0, avg_row_idx), (-1, avg_row_idx), colors.HexColor('#EAEAEA')),
+            ('TOPPADDING', (0, 0), (-1, -1), 3),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ]
+
+        for r in range(3, avg_row_idx):
+            bg = colors.white if r % 2 == 1 else colors.HexColor('#F9F9F9')
+            table_style_list.append(('BACKGROUND', (0, r), (-1, r), bg))
+
+        co_att_table.setStyle(TableStyle(table_style_list))
         story.append(co_att_table)
     story.append(Spacer(1, 15))
 

@@ -16,7 +16,8 @@ import {
   Sparkles,
   ChevronDown,
   ChevronRight,
-  FileQuestion
+  FileQuestion,
+  BarChart3
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab, dark, setDark, handleLogout, activeCourse }) {
@@ -35,6 +36,7 @@ export default function Sidebar({ activeTab, setActiveTab, dark, setDark, handle
     { id: 'philosophy', label: 'Teaching Philosophy', icon: GraduationCap },
     { id: 'assignment', label: 'Assignment Generator', icon: FileQuestion },
     { id: 'attainment', label: 'Marks & Attainment', icon: TrendingUp },
+    { id: 'analysis', label: 'Analysis Dashboard', icon: BarChart3 },
     { id: 'recommendations', label: 'AI Recommendations', icon: Lightbulb },
     { id: 'reports', label: 'Reports & Logs', icon: FileText },
   ];

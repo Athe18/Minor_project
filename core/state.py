@@ -127,6 +127,26 @@ class AgentState:
         # =====================================================
         self.students: list = []
         self.max_marks: dict = {}
+        self.ia_students: list = []
+        self.ia_max_marks: dict = {}
+        self.mse_students: list = []
+        self.mse_max_marks: dict = {}
+        self.ese_students: list = []
+        self.ese_max_marks: dict = {}
+
+        # =====================================================
+        # REDESIGNED CO WORKFLOW STATE
+        # =====================================================
+        self.semester: str = ""
+        self.course_description_option: str = ""  # "pdf", "txt", "typed"
+        self.course_description_text: str = ""
+        self.course_context_data: dict = {}       # topics, skills, prerequisites, summary
+        self.previous_cos_option: str = ""        # "upload", "paste", "skip"
+        self.previous_cos_raw: str = ""           # raw previous CO text
+        self.previous_cos: list[CourseOutcome] = []  # parsed previous COs
+        self.previous_attainment_analysis: dict = {} # calculated/qualitative past analysis
+        self.assessment_analysis: dict = {}        # parsed IA/Assignment question mappings
+        self.new_generated_cos: list[CourseOutcome] = [] # unapproved generated outcomes
 
     # =========================================================
     # LOGGING
