@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import DepartmentSelect from './pages/DepartmentSelect';
@@ -13,32 +14,49 @@ import Recommendations from './pages/Recommendations';
 import Reports from './pages/Reports';
 import AssignmentGenerator from './pages/AssignmentGenerator';
 import AnalysisDashboard from './pages/AnalysisDashboard';
-import { courseAPI } from './api';
+import { courseAPI, authAPI } from './api';
 import Chatbot from './components/Chatbot';
 import ErrorBoundary from './components/ErrorBoundary';
+import AdminLayout from './components/AdminLayout';
+import FacultyLayout from './components/FacultyLayout';
+import Unauthorized from './pages/Unauthorized';
 
-export default function App() {
+
+function AppContent() {
   const [auth, setAuth] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
   const [dark, setDark] = useState(false);
   const [courseState, setCourseState] = useState(null);
   const [activeSubjectId, setActiveSubjectId] = useState(localStorage.getItem('active_subject_id') || '');
   const [department, setDepartment] = useState(localStorage.getItem('department') || '');
+  
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Check auth and theme preferences on mount
   useEffect(() => {
     const token = localStorage.getItem('token');
-    const username = localStorage.getItem('username');
-    let name = localStorage.getItem('name');
-    if (name && (name.includes('Nair') || name === 'Dr. Atharva Nair')) {
-      name = 'Dr. Atharva Kamble';
-      localStorage.setItem('name', name);
-    }
-    if (token) {
-      setAuth({ token, username, name });
-    }
+    
+    const checkAuthMe = async () => {
+      if (token) {
+        try {
+          const meRes = await authAPI.getMe();
+          if (meRes.data.success) {
+            setAuth({
+              token,
+              username: meRes.data.username,
+              name: meRes.data.name,
+              role: meRes.data.role
+            });
+            localStorage.setItem('name', meRes.data.name);
+            localStorage.setItem('role', meRes.data.role);
+          }
+        } catch (err) {
+          handleLogout();
+        }
+      }
+    };
+    checkAuthMe();
 
-    // Default to dark mode if requested, or read setting
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
       setDark(true);
@@ -89,21 +107,93 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     localStorage.removeItem('username');
     localStorage.removeItem('name');
     localStorage.removeItem('active_subject_id');
     localStorage.removeItem('department');
+    localStorage.removeItem('role');
     setAuth(null);
     setCourseState(null);
     setActiveSubjectId('');
     setDepartment('');
+    navigate('/login');
   };
 
   if (!auth) {
-    return <Login setAuth={setAuth} />;
+    return (
+      <Routes>
+        <Route path="*" element={
+          <Login setAuth={(authData) => {
+            setAuth(authData);
+            localStorage.setItem('role', authData.role);
+            if (authData.role === 'admin') {
+              navigate('/admin/dashboard');
+            } else if (authData.role === 'course_faculty') {
+              navigate('/faculty/dashboard');
+            } else {
+              navigate('/dashboard');
+            }
+          }} />
+        } />
+      </Routes>
+    );
   }
 
-  if (!department) {
+  return (
+    <Routes>
+      {/* Route Guards for Admin paths */}
+      <Route path="/admin/*" element={
+        auth.role === 'admin' ? (
+          <AdminLayout auth={auth} handleLogout={handleLogout} dark={dark} setDark={setDark} />
+        ) : (
+          <Navigate to="/unauthorized" replace />
+        )
+      } />
+
+      {/* Route Guards for Faculty paths */}
+      <Route path="/faculty/*" element={
+        auth.role === 'course_faculty' ? (
+          <FacultyLayout auth={auth} handleLogout={handleLogout} dark={dark} setDark={setDark} />
+        ) : (
+          <Navigate to="/unauthorized" replace />
+        )
+      } />
+
+      {/* Unauthorized Route */}
+      <Route path="/unauthorized" element={<Unauthorized />} />
+
+      {/* Academic paths */}
+      <Route path="/*" element={
+        auth.role === 'course_champion' ? (
+          <AcademicLayout 
+            auth={auth}
+            dark={dark}
+            setDark={setDark}
+            handleLogout={handleLogout}
+            courseState={courseState}
+            activeSubjectId={activeSubjectId}
+            refreshState={refreshState}
+            handleSelectSubject={handleSelectSubject}
+            department={department}
+            setDepartment={setDepartment}
+          />
+        ) : (
+          <Navigate to="/unauthorized" replace />
+        )
+      } />
+    </Routes>
+  );
+}
+
+function AcademicLayout({
+  auth, dark, setDark, handleLogout, courseState, activeSubjectId, refreshState, handleSelectSubject, department, setDepartment
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // If department is required and not set, show DepartmentSelect (except for admin)
+  if (!department && auth.role !== 'admin') {
     return (
       <DepartmentSelect
         facultyName={auth.name}
@@ -119,59 +209,81 @@ export default function App() {
     );
   }
 
-  // Render correct page view
+  const activeTab = location.pathname.substring(1) || 'dashboard';
+
+  const handleSetTab = (tabId) => {
+    navigate(`/${tabId}`);
+  };
+
   const renderView = () => {
+    const isReadOnly = auth.role === 'admin';
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard setActiveTab={setActiveTab} onSelectSubject={handleSelectSubject} />;
+        return <Dashboard setActiveTab={handleSetTab} onSelectSubject={handleSelectSubject} readOnly={isReadOnly} />;
       case 'workspace':
         return (
           <ErrorBoundary>
-            <SubjectWorkspace activeSubjectId={activeSubjectId} refreshAllState={refreshState} setActiveTab={setActiveTab} />
+            <SubjectWorkspace activeSubjectId={activeSubjectId} refreshAllState={refreshState} setActiveTab={handleSetTab} readOnly={isReadOnly} />
           </ErrorBoundary>
         );
       case 'setup':
-        return <Setup key={activeSubjectId} activeCourse={courseState} refreshState={refreshState} setActiveTab={setActiveTab} />;
+        return <Setup key={activeSubjectId} activeCourse={courseState} refreshState={refreshState} setActiveTab={handleSetTab} readOnly={isReadOnly} />;
       case 'cos':
-        return <CourseOutcomes key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <CourseOutcomes key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'mapping':
-        return <Mapping key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <Mapping key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'philosophy':
-        return <Philosophy key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <Philosophy key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'attainment':
-        return <Attainment key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <Attainment key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'analysis':
-        return <AnalysisDashboard key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} setActiveTab={setActiveTab} />;
+        return <AnalysisDashboard key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} setActiveTab={handleSetTab} readOnly={isReadOnly} />;
       case 'recommendations':
-        return <Recommendations key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <Recommendations key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'reports':
-        return <Reports key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} />;
+        return <Reports key={activeSubjectId} courseState={courseState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       case 'assignment':
-        return <AssignmentGenerator key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} />;
+        return <AssignmentGenerator key={activeSubjectId} courseState={courseState} refreshState={refreshState} activeSubjectId={activeSubjectId} readOnly={isReadOnly} />;
       default:
-        return <Dashboard setActiveTab={setActiveTab} onSelectSubject={handleSelectSubject} />;
+        return <Navigate to="/dashboard" replace />;
     }
   };
 
+  const isReadOnly = auth.role === 'admin';
+
   return (
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200">
-      {/* Navigation Sidebar */}
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleSetTab} 
         dark={dark} 
         setDark={setDark} 
         handleLogout={handleLogout}
         activeCourse={courseState}
       />
       
-      {/* Workspace Panel */}
       <main className="flex-1 p-6 lg:p-8 overflow-x-hidden">
-        {/* Welcome header info */}
+        {/* Read-only banner for Admin */}
+        {isReadOnly && (
+          <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 rounded-xl flex items-center justify-between text-xs font-semibold">
+            <span>⚠️ Read-Only Administrative Mode. You cannot edit calculations or map targets.</span>
+            <button 
+              onClick={() => navigate('/admin/dashboard')}
+              className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+            >
+              Back to Admin Portal
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-850 pb-4 mb-6">
           <div className="hidden sm:block">
-            <span className="text-[10px] text-slate-455 font-bold uppercase tracking-wider">Faculty Portal</span>
-            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Welcome, {auth.name}</h4>
+            <span className="text-[10px] text-slate-455 font-bold uppercase tracking-wider">
+              {isReadOnly ? 'Admin View: Academic Review' : 'Faculty Portal'}
+            </span>
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Welcome, {auth.name}
+            </h4>
           </div>
           
           <div className="flex items-center gap-2">
@@ -182,14 +294,20 @@ export default function App() {
           </div>
         </div>
 
-        {/* Dynamic page container */}
         <div className="animate-fadeIn">
           {renderView()}
         </div>
       </main>
 
-      {/* Global AI Floating Widget */}
       <Chatbot />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
   );
 }

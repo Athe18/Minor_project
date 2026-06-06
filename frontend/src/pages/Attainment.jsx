@@ -14,7 +14,7 @@ import {
   ClipboardList
 } from 'lucide-react';
 
-export default function Attainment({ courseState, refreshState, activeSubjectId }) {
+export default function Attainment({ courseState, refreshState, activeSubjectId, readOnly }) {
   const [coAttainment, setCoAttainment] = useState([]);
   const [poAttainment, setPoAttainment] = useState([]);
   const [students, setStudents] = useState([]);
@@ -256,7 +256,7 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
         </div>
         {coAttainment.length > 0 && (
           <div className="flex gap-2 self-start sm:self-center">
-            {isFinalized && (
+            {isFinalized && !readOnly && (
               <button
                 onClick={() => setIsFinalized(false)}
                 disabled={loading}
@@ -265,13 +265,15 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                 Edit Marks & Targets
               </button>
             )}
-            <button
-              onClick={handleReset}
-              disabled={loading}
-              className="px-4 py-2 text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer font-sans"
-            >
-              Reset & Clear Data
-            </button>
+            {!readOnly && (
+              <button
+                onClick={handleReset}
+                disabled={loading}
+                className="px-4 py-2 text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/20 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer font-sans"
+              >
+                Reset & Clear Data
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -294,14 +296,15 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
             
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
               {(courseState?.cos || []).map(co => (
-                <div key={co.co_id} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white dark:bg-slate-950/50 border border-slate-200/60 dark:border-slate-850 hover:border-purple-500/35 transition-all duration-200 shadow-sm">
-                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{co.co_id} Target</span>
+                <div key={co.co_id} className="flex flex-col gap-1.5 p-3 rounded-xl bg-white dark:bg-slate-955/50 border border-slate-202/60 dark:border-slate-855 hover:border-purple-500/35 transition-all duration-202 shadow-sm">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-550 uppercase tracking-wider">{co.co_id} Target</span>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
                       min="0"
                       max="100"
                       step="1"
+                      disabled={readOnly}
                       value={coTargets[co.co_id] !== undefined ? coTargets[co.co_id] : (courseState.level1_threshold || 60)}
                       onChange={(e) => {
                         const val = parseFloat(e.target.value);
@@ -310,9 +313,9 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                           [co.co_id]: isNaN(val) ? '' : val
                         }));
                       }}
-                      className="w-full px-2.5 py-1.5 bg-slate-50/50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-center"
+                      className="w-full px-2.5 py-1.5 bg-slate-50/50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-850 dark:text-slate-250 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-center disabled:opacity-70 disabled:cursor-not-allowed"
                     />
-                    <span className="text-xs font-bold text-slate-400 dark:text-slate-500">%</span>
+                    <span className="text-xs font-bold text-slate-400 dark:text-slate-550">%</span>
                   </div>
                 </div>
               ))}
@@ -320,30 +323,38 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
           </div>
 
           {/* Tab selectors */}
-          <div className="flex border-b border-slate-100 dark:border-slate-800/60 mb-2">
-            <button
-              onClick={() => setActiveInputTab('upload')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                activeInputTab === 'upload'
-                  ? 'border-purple-500 text-purple-500'
-                  : 'border-transparent text-slate-400 hover:text-slate-350'
-              }`}
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Upload CSV File
-            </button>
-            <button
-              onClick={() => setActiveInputTab('manual')}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-                activeInputTab === 'manual'
-                  ? 'border-purple-500 text-purple-500'
-                  : 'border-transparent text-slate-400 hover:text-slate-350'
-              }`}
-            >
-              <ClipboardList className="w-4 h-4" />
-              Manual Entry Grid
-            </button>
-          </div>
+          {!readOnly ? (
+            <>
+              <div className="flex border-b border-slate-100 dark:border-slate-800/60 mb-2">
+                <button
+                  onClick={() => setActiveInputTab('upload')}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                    activeInputTab === 'upload'
+                      ? 'border-purple-500 text-purple-500'
+                      : 'border-transparent text-slate-400 hover:text-slate-350'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  Upload CSV File
+                </button>
+                <button
+                  onClick={() => setActiveInputTab('manual')}
+                  className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+                    activeInputTab === 'manual'
+                      ? 'border-purple-500 text-purple-500'
+                      : 'border-transparent text-slate-400 hover:text-slate-350'
+                  }`}
+                >
+                  <ClipboardList className="w-4 h-4" />
+                  Manual Entry Grid
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="p-6 bg-slate-50 dark:bg-slate-900 border dark:border-slate-800 rounded-xl text-center text-xs font-semibold text-slate-500">
+              Student marks attainment calculations are in read-only mode for Admin review.
+            </div>
+          )}
 
           {activeInputTab === 'upload' ? (
             <div className="space-y-6">
@@ -369,17 +380,19 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                       </span>
                     </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(e) => handleSpecificFileUpload(e, 'IA')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
-                      Upload CSV
-                    </button>
-                  </div>
+                  {!readOnly && (
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleSpecificFileUpload(e, 'IA')}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
+                        Upload CSV
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* MSE Upload */}
@@ -395,17 +408,19 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                       </span>
                     </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(e) => handleSpecificFileUpload(e, 'MSE')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
-                      Upload CSV
-                    </button>
-                  </div>
+                  {!readOnly && (
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleSpecificFileUpload(e, 'MSE')}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
+                        Upload CSV
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* ESE Upload */}
@@ -421,31 +436,35 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                       </span>
                     </div>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      accept=".csv"
-                      onChange={(e) => handleSpecificFileUpload(e, 'ESE')}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    />
-                    <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
-                      Upload CSV
-                    </button>
-                  </div>
+                  {!readOnly && (
+                    <div className="relative">
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={(e) => handleSpecificFileUpload(e, 'ESE')}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <button className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg transition-colors cursor-pointer">
+                        Upload CSV
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="pt-2 flex flex-col gap-2">
-                <button
-                  onClick={handleLoadSampleMarks}
-                  className="w-full py-2.5 text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-650 dark:text-slate-350 rounded-xl border border-slate-200 dark:border-slate-800/60 transition-colors cursor-pointer"
-                >
-                  Demo: Load Sample IA, MSE, and ESE Marks
-                </button>
-              </div>
+              {!readOnly && (
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    onClick={handleLoadSampleMarks}
+                    className="w-full py-2.5 text-xs font-semibold bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 text-slate-650 dark:text-slate-350 rounded-xl border border-slate-200 dark:border-slate-800/60 transition-colors cursor-pointer"
+                  >
+                    Demo: Load Sample IA, MSE, and ESE Marks
+                  </button>
+                </div>
+              )}
 
               {/* Continue button after all three inputs are given */}
-              {courseState?.ia_students?.length > 0 &&
+              {!readOnly && courseState?.ia_students?.length > 0 &&
                courseState?.mse_students?.length > 0 &&
                courseState?.ese_students?.length > 0 && (
                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800/60 mt-4">
@@ -468,84 +487,86 @@ export default function Attainment({ courseState, refreshState, activeSubjectId 
                 </p>
               </div>
 
-              <form onSubmit={handleManualSubmit} className="space-y-6">
-                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-850 shadow-sm">
-                  <table className="w-full text-xs text-center border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-900 text-slate-455 font-bold uppercase tracking-wider">
-                        <th className="p-3 text-left">CO ID</th>
-                        <th className="p-3">IA Achievement (%)</th>
-                        <th className="p-3">MSE Achievement (%)</th>
-                        <th className="p-3">ESE Achievement (%)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-                      {(courseState?.cos || []).map(co => (
-                        <tr key={co.co_id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
-                          <td className="p-3 text-left font-bold text-slate-800 dark:text-slate-200">{co.co_id}</td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              required
-                              placeholder="e.g. 80"
-                              value={manualMarks[co.co_id]?.ia_percentage ?? ''}
-                              onChange={(e) => handleManualMarkChange(co.co_id, 'ia_percentage', e.target.value)}
-                              className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              required
-                              placeholder="e.g. 70"
-                              value={manualMarks[co.co_id]?.mse_percentage ?? ''}
-                              onChange={(e) => handleManualMarkChange(co.co_id, 'mse_percentage', e.target.value)}
-                              className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            />
-                          </td>
-                          <td className="p-2">
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              required
-                              placeholder="e.g. 70"
-                              value={manualMarks[co.co_id]?.ese_percentage ?? ''}
-                              onChange={(e) => handleManualMarkChange(co.co_id, 'ese_percentage', e.target.value)}
-                              className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            />
-                          </td>
+              {!readOnly ? (
+                <form onSubmit={handleManualSubmit} className="space-y-6">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-850 shadow-sm">
+                    <table className="w-full text-xs text-center border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-900 text-slate-455 font-bold uppercase tracking-wider">
+                          <th className="p-3 text-left">CO ID</th>
+                          <th className="p-3">IA Achievement (%)</th>
+                          <th className="p-3">MSE Achievement (%)</th>
+                          <th className="p-3">ESE Achievement (%)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
+                        {(courseState?.cos || []).map(co => (
+                          <tr key={co.co_id} className="hover:bg-slate-50/40 dark:hover:bg-slate-900/10">
+                            <td className="p-3 text-left font-bold text-slate-800 dark:text-slate-200">{co.co_id}</td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                required
+                                placeholder="e.g. 80"
+                                value={manualMarks[co.co_id]?.ia_percentage ?? ''}
+                                onChange={(e) => handleManualMarkChange(co.co_id, 'ia_percentage', e.target.value)}
+                                className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                required
+                                placeholder="e.g. 70"
+                                value={manualMarks[co.co_id]?.mse_percentage ?? ''}
+                                onChange={(e) => handleManualMarkChange(co.co_id, 'mse_percentage', e.target.value)}
+                                className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                required
+                                placeholder="e.g. 70"
+                                value={manualMarks[co.co_id]?.ese_percentage ?? ''}
+                                onChange={(e) => handleManualMarkChange(co.co_id, 'ese_percentage', e.target.value)}
+                                className="w-28 px-3 py-1.5 bg-slate-50 border border-slate-200 dark:bg-slate-950 dark:border-slate-800 rounded-lg text-center font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-purple-650 hover:bg-purple-550 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Saving and Recalculating...
-                    </>
-                  ) : (
-                    <>
-                      <TrendingUp className="w-4 h-4" />
-                      Calculate & Save Attainment
-                    </>
-                  )}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full py-3 bg-purple-650 hover:bg-purple-550 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-lg transition-colors flex items-center justify-center gap-2 uppercase tracking-wider cursor-pointer"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving and Recalculating...
+                      </>
+                    ) : (
+                      <>
+                        <TrendingUp className="w-4 h-4" />
+                        Calculate & Save Attainment
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : null}
             </div>
           )}
 

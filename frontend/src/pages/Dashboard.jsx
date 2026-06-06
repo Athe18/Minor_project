@@ -23,7 +23,7 @@ import {
 import { subjectAPI } from '../api';
 
 
-export default function Dashboard({ setActiveTab, onSelectSubject }) {
+export default function Dashboard({ setActiveTab, onSelectSubject, readOnly }) {
   const [subjects, setSubjects] = useState([]);
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -203,21 +203,23 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
         <div className="lg:col-span-2 space-y-6">
           
           {/* Add New Subject Button */}
-          <button
-            onClick={() => setActiveTab('setup')}
-            className="w-full glass-panel p-5 flex items-center justify-between gap-4 group hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 text-left"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
-                <Plus className="w-5 h-5" />
+          {!readOnly && (
+            <button
+              onClick={() => setActiveTab('setup')}
+              className="w-full glass-panel p-5 flex items-center justify-between gap-4 group hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 text-left"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform duration-200">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover:text-blue-500 transition-colors">Add New Subject</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Open Course Setup to configure a new subject with CO generation</p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-sm text-slate-800 dark:text-slate-100 group-hover:text-blue-500 transition-colors">Add New Subject</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Open Course Setup to configure a new subject with CO generation</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all duration-200 shrink-0" />
-          </button>
+              <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-500 group-hover:translate-x-1 transition-all duration-200 shrink-0" />
+            </button>
+          )}
 
           {/* Directory table */}
           <div className="glass-panel p-5 space-y-4">
@@ -296,13 +298,15 @@ export default function Dashboard({ setActiveTab, onSelectSubject }) {
                               Work
                             </button>
                             
-                            <button
-                              onClick={() => handleDeleteSubject(sub.subject_name)}
-                              className="p-1.5 rounded-lg text-slate-450 hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
-                              title="Delete Subject"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!readOnly && (
+                              <button
+                                onClick={() => handleDeleteSubject(sub.subject_name)}
+                                className="p-1.5 rounded-lg text-slate-450 hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                                title="Delete Subject"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

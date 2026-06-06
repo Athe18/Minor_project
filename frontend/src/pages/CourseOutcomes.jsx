@@ -25,7 +25,7 @@ import {
   X
 } from 'lucide-react';
 
-export default function CourseOutcomes({ courseState, refreshState, activeSubjectId }) {
+export default function CourseOutcomes({ courseState, refreshState, activeSubjectId, readOnly }) {
   // Start at Phase 1 (semester + subject selection)
   const [currentStep, setCurrentStep] = useState(1);
   const [curriculum, setCurriculum] = useState(null);
@@ -37,8 +37,7 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
   const defaultSem = (yr) => {
     if (yr === 'FY') return 'Semester 1';
     if (yr === 'SY') return 'Semester 3';
-    if (yr === 'TY') return 'Semester 5';
-    return 'Semester 7'; // LY
+    return 'Semester 5'; // TY or default fallback
   };
   const [semester, setSemester] = useState(() => defaultSem(localStorage.getItem('selected_year') || courseState?.year || 'SY'));
   const [subjectName, setSubjectName] = useState('');
@@ -174,7 +173,7 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
   };
 
   const getYearLabel = (y) => {
-    const map = { FY: 'First Year (FY)', SY: 'Second Year (SY)', TY: 'Third Year (TY)', LY: 'Final Year (LY)' };
+    const map = { FY: 'First Year (FY)', SY: 'Second Year (SY)', TY: 'Third Year (TY)' };
     return map[y] || y;
   };
 
@@ -632,14 +631,24 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              Analyze Course Context
-            </button>
+            {!readOnly ? (
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Analyze Course Context
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(3)}
+                className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold"
+              >
+                Continue Review <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </form>
         </div>
       )}
@@ -715,14 +724,24 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {prevOption === 'skip' ? 'Continue' : 'Process & Analyze Historical COs'}
-            </button>
+            {!readOnly ? (
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {prevOption === 'skip' ? 'Continue' : 'Process & Analyze Historical COs'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCurrentStep(4)}
+                className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold"
+              >
+                Continue Review <ChevronRight className="w-4 h-4" />
+              </button>
+            )}
           </form>
         </div>
       )}
@@ -825,7 +844,7 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                   Proceed Anyway
                 </button>
               </div>
-            ) : (
+            ) : !readOnly ? (
               <button
                 onClick={handlePreviousPerformanceSubmit}
                 disabled={loading}
@@ -833,6 +852,13 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 {perfFiles.length === 0 ? "Skip / Continue" : "Analyze Attainment & Continue"}
+              </button>
+            ) : (
+              <button
+                onClick={() => setCurrentStep(5)}
+                className="w-full py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold"
+              >
+                Continue Review <ChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -924,13 +950,25 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                 </div>
               </div>
 
-              <button
-                onClick={handleTriggerAIGeneration}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
-              >
-                <Sparkles className="w-4 h-4 animate-pulse" />
-                Trigger CO Generation Agents
-              </button>
+              {!readOnly ? (
+                <button
+                  onClick={handleTriggerAIGeneration}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10"
+                >
+                  <Sparkles className="w-4 h-4 animate-pulse" />
+                  Trigger CO Generation Agents
+                </button>
+              ) : (
+                <div className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 rounded-xl text-center text-xs font-semibold">
+                  Syllabus engineering wizard is in read-only mode for Admin review.
+                  <button
+                    onClick={() => setCurrentStep(6)}
+                    className="w-full mt-3 py-3 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl flex items-center justify-center gap-1.5 text-xs font-semibold"
+                  >
+                    Continue Review <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -953,14 +991,16 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
               >
                 Back to Generation
               </button>
-              <button
-                onClick={handleFinalizeWork}
-                disabled={loading}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1"
-              >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Approve & Finalize Official outcomes
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={handleFinalizeWork}
+                  disabled={loading}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md flex items-center gap-1"
+                >
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Approve & Finalize Official outcomes
+                </button>
+              )}
             </div>
           </div>
 
@@ -990,13 +1030,15 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                         </div>
                         <p className="text-xs font-medium text-slate-650 dark:text-slate-350">{co.statement}</p>
                       </div>
-                      <button
-                        onClick={() => handleKeepOutcome(co)}
-                        className="self-center p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-colors shrink-0"
-                        title="Add to Final Official Set"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => handleKeepOutcome(co)}
+                          className="self-center p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-colors shrink-0"
+                          title="Add to Final Official Set"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1022,13 +1064,15 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                       </div>
                       <p className="text-xs font-medium text-slate-700 dark:text-slate-350">{co.statement}</p>
                     </div>
-                    <button
-                      onClick={() => handleKeepOutcome(co)}
-                      className="self-center p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-colors shrink-0"
-                      title="Add to Final Official Set"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => handleKeepOutcome(co)}
+                        className="self-center p-1.5 bg-blue-500/10 text-blue-500 rounded-lg hover:bg-blue-500 hover:text-white transition-colors shrink-0"
+                        title="Add to Final Official Set"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1045,12 +1089,14 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">Faculty can customize, rename, and add custom entries below to achieve perfect OBE alignment.</p>
               </div>
+             {!readOnly && (
               <button
                 onClick={handleAddCustomOutcome}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] rounded-lg flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Custom outcome
               </button>
+            )}
             </div>
 
             {finalCos.length === 0 ? (
@@ -1117,22 +1163,24 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                             <p className="text-xs font-semibold text-slate-800 dark:text-slate-300">{co.statement}</p>
                           </div>
                           
-                          <div className="flex gap-1 shrink-0 self-center">
-                            <button
-                              onClick={() => handleStartEditFinal(idx, co)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500"
-                              title="Edit Statement"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleRemoveFinalOutcome(idx)}
-                              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-rose-500"
-                              title="Remove"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          {!readOnly && (
+                            <div className="flex gap-1 shrink-0 self-center">
+                              <button
+                                onClick={() => handleStartEditFinal(idx, co)}
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500"
+                                title="Edit Statement"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleRemoveFinalOutcome(idx)}
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-rose-500"
+                                title="Remove"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1173,23 +1221,25 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
               </span>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button
-              onClick={handleAddCustomOutcome}
-              className="px-4 py-2 border dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-500/5 flex items-center gap-1.5 transition-all hover:scale-[1.02]"
-            >
-              <Plus className="w-3.5 h-3.5 text-blue-500" /> Add Custom CO
-            </button>
-            <button
-              onClick={() => {
-                setShowWizard(true);
-                setCurrentStep(1);
-              }}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/10 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <RefreshCw className="w-3.5 h-3.5" /> Re-engineer Syllabus (Rerun Wizard)
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddCustomOutcome}
+                className="px-4 py-2 border dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-500/5 flex items-center gap-1.5 transition-all hover:scale-[1.02]"
+              >
+                <Plus className="w-3.5 h-3.5 text-blue-500" /> Add Custom CO
+              </button>
+              <button
+                onClick={() => {
+                  setShowWizard(true);
+                  setCurrentStep(1);
+                }}
+                className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/10 flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Re-engineer Syllabus (Rerun Wizard)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1277,23 +1327,24 @@ export default function CourseOutcomes({ courseState, refreshState, activeSubjec
                           {co.statement}
                         </p>
                       </div>
-                      
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-                        <button
-                          onClick={() => handleStartEditFinal(idx, co)}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-blue-950/30 text-slate-500 hover:text-blue-500 transition-colors"
-                          title="Edit Statement"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleRemoveFinalOutcome(idx)}
-                          className="p-2 rounded-xl bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/30 text-slate-500 hover:text-rose-500 transition-colors"
-                          title="Remove"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                        {!readOnly && (
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+                          <button
+                            onClick={() => handleStartEditFinal(idx, co)}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-blue-100 dark:bg-slate-800 dark:hover:bg-blue-950/30 text-slate-500 hover:text-blue-500 transition-colors"
+                            title="Edit Statement"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleRemoveFinalOutcome(idx)}
+                            className="p-2 rounded-xl bg-slate-100 hover:bg-rose-100 dark:bg-slate-800 dark:hover:bg-rose-950/30 text-slate-500 hover:text-rose-500 transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

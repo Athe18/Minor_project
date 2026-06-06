@@ -10,3 +10,5 @@ fastapi
 uvicorn[standard]
 python-multipart
 reportlab
+psycopg2-binary
+PyJWT

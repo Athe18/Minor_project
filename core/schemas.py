@@ -1,5 +1,12 @@
 from pydantic import BaseModel
 from typing import Optional
+from enum import Enum
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    COURSE_CHAMPION = "course_champion"
+    COURSE_FACULTY = "course_faculty"
+
 
 class CourseOutcome(BaseModel):
     co_id: str

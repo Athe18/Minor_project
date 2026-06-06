@@ -13,7 +13,7 @@ import {
   BookOpen
 } from 'lucide-react';
 
-export default function AssignmentGenerator({ courseState, refreshState }) {
+export default function AssignmentGenerator({ courseState, refreshState, readOnly }) {
   const [difficulty, setDifficulty] = useState('Medium');
   const [assignmentType, setAssignmentType] = useState('Theory');
   const [qCount, setQCount] = useState(3);
@@ -128,13 +128,15 @@ export default function AssignmentGenerator({ courseState, refreshState }) {
               Assignments can only be generated after all Course Outcomes have been finalized and approved to ensure accreditation compliance.
             </p>
           </div>
-          <button
-            onClick={handleApproveCos}
-            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 mx-auto"
-          >
-            <Check className="w-4 h-4" />
-            Approve All COs Now
-          </button>
+          {!readOnly && (
+            <button
+              onClick={handleApproveCos}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 mx-auto"
+            >
+              <Check className="w-4 h-4" />
+              Approve All COs Now
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -215,18 +217,24 @@ export default function AssignmentGenerator({ courseState, refreshState }) {
                   </div>
                 )}
 
-                <button
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10 transition-all hover:translate-y-[-1px] disabled:opacity-50"
-                >
-                  {generating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  {generating ? "Generating..." : "Generate Sheet"}
-                </button>
+                {!readOnly ? (
+                  <button
+                    onClick={handleGenerate}
+                    disabled={generating}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-lg shadow-blue-600/10 transition-all hover:translate-y-[-1px] disabled:opacity-50"
+                  >
+                    {generating ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-4 h-4" />
+                    )}
+                    {generating ? "Generating..." : "Generate Sheet"}
+                  </button>
+                ) : (
+                  <div className="p-3 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center text-xs text-slate-500 font-semibold">
+                    Read-Only Mode: Cannot generate assignments.
+                  </div>
+                )}
               </div>
             </div>
           </div>

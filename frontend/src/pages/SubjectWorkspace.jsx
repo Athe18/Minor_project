@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { courseAPI, reportAPI } from '../api';
 
-export default function SubjectWorkspace({ activeSubjectId, refreshAllState, setActiveTab }) {
+export default function SubjectWorkspace({ activeSubjectId, refreshAllState, setActiveTab, readOnly }) {
   const [courseState, setCourseState] = useState(null);
   const [loadingState, setLoadingState] = useState(true);
   const [error, setError] = useState('');
@@ -305,12 +305,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 1: Academic Parameters</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Basic parameters and dynamic NBA attainment thresholds</p>
               </div>
-              <button
-                onClick={() => setActiveTab('setup')}
-                className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-              >
-                Change in Setup <ChevronRight className="w-4 h-4" />
-              </button>
+             {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('setup')}
+                 className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+               >
+                 Change in Setup <ChevronRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -387,12 +389,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                   Syllabus text input is required to map course topics, generate course outcomes, and align cognitive levels.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('setup')}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
-              >
-                Upload Syllabus <ArrowRight className="w-4 h-4" />
-              </button>
+              {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('setup')}
+                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+               >
+                 Upload Syllabus <ArrowRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
           );
         }
@@ -404,21 +408,23 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 2: Syllabus & Context</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Syllabus specifications and generated teaching guidelines</p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setActiveTab('setup')}
-                  className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-                >
-                  Edit Syllabus <ChevronRight className="w-4 h-4" />
-                </button>
-                <span className="text-slate-300 dark:text-slate-800">|</span>
-                <button
-                  onClick={() => setActiveTab('philosophy')}
-                  className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 font-bold"
-                >
-                  Edit Philosophy <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+             {!readOnly && (
+               <div className="flex gap-2">
+                 <button
+                   onClick={() => setActiveTab('setup')}
+                   className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+                 >
+                   Edit Syllabus <ChevronRight className="w-4 h-4" />
+                 </button>
+                 <span className="text-slate-300 dark:text-slate-800">|</span>
+                 <button
+                   onClick={() => setActiveTab('philosophy')}
+                   className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600 font-bold"
+                 >
+                   Edit Philosophy <ChevronRight className="w-4 h-4" />
+                 </button>
+               </div>
+             )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -492,12 +498,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                   Run the AI CO Generator and Validator wizard to extract outcomes conforming to Bloom's taxonomy.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('cos')}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
-              >
-                Launch CO Wizard <ArrowRight className="w-4 h-4" />
-              </button>
+              {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('cos')}
+                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+               >
+                 Launch CO Wizard <ArrowRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
           );
         }
@@ -509,12 +517,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 3: Course Outcomes (COs)</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">AI-generated outcomes and dynamic Bloom's taxonomy evaluation</p>
               </div>
-              <button
-                onClick={() => setActiveTab('cos')}
-                className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-              >
-                Modify Outcomes <ChevronRight className="w-4 h-4" />
-              </button>
+             {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('cos')}
+                 className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+               >
+                 Modify Outcomes <ChevronRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
 
             {/* Bloom's Distribution and statistics */}
@@ -614,12 +624,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                   Mapping strengths (0-3) between Course Outcomes (COs) and Program Outcomes (POs) are required to measure direct attainment contribution.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('mapping')}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
-              >
-                Create Matrix <ArrowRight className="w-4 h-4" />
-              </button>
+              {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('mapping')}
+                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+               >
+                 Create Matrix <ArrowRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
           );
         }
@@ -636,12 +648,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 4: Articulation Matrix</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">CO-PO mapping correlation grid and NBA alignment auditing</p>
               </div>
-              <button
-                onClick={() => setActiveTab('mapping')}
-                className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-              >
-                Modify Correlations <ChevronRight className="w-4 h-4" />
-              </button>
+             {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('mapping')}
+                 className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+               >
+                 Modify Correlations <ChevronRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
 
             {/* Stats */}
@@ -746,12 +760,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                   Please upload a student cohort marks spreadsheet (CSV/Excel) containing scores mapped by Course Outcome.
                 </p>
               </div>
-              <button
-                onClick={() => setActiveTab('attainment')}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
-              >
-                Upload Student Marks <ArrowRight className="w-4 h-4" />
-              </button>
+              {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('attainment')}
+                 className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-md transition-all inline-flex items-center gap-1.5"
+               >
+                 Upload Student Marks <ArrowRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
           );
         }
@@ -763,12 +779,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 5: Assessment Marks</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Assessment components, student rosters, and question targets</p>
               </div>
-              <button
-                onClick={() => setActiveTab('attainment')}
-                className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-              >
-                Re-upload / Change Marks <ChevronRight className="w-4 h-4" />
-              </button>
+             {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('attainment')}
+                 className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+               >
+                 Re-upload / Change Marks <ChevronRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -878,12 +896,14 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
                 <h3 className="text-lg font-bold text-slate-850 dark:text-slate-100">Phase 6: Attainment Analytics</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Direct Course Outcome achievement and weighted Program Outcomes contribution</p>
               </div>
-              <button
-                onClick={() => setActiveTab('attainment')}
-                className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
-              >
-                Recalculate <ChevronRight className="w-4 h-4" />
-              </button>
+             {!readOnly && (
+               <button
+                 onClick={() => setActiveTab('attainment')}
+                 className="mt-3 md:mt-0 flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-bold"
+               >
+                 Recalculate <ChevronRight className="w-4 h-4" />
+               </button>
+             )}
             </div>
 
             {/* Graphs Grid */}
@@ -1106,14 +1126,16 @@ export default function SubjectWorkspace({ activeSubjectId, refreshAllState, set
           </p>
         </div>
         
-        {/* Quick config link */}
-        <button
-          onClick={() => setActiveTab('setup')}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-xs font-bold text-slate-750 dark:text-slate-200 rounded-xl transition-all border dark:border-slate-800 shadow-sm"
-        >
-          <Settings className="w-3.5 h-3.5 text-slate-500" />
-          Setup Settings
-        </button>
+         {/* Quick config link */}
+        {!readOnly && (
+          <button
+            onClick={() => setActiveTab('setup')}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 text-xs font-bold text-slate-750 dark:text-slate-200 rounded-xl transition-all border dark:border-slate-800 shadow-sm"
+          >
+            <Settings className="w-3.5 h-3.5 text-slate-500" />
+            Setup Settings
+          </button>
+        )}
       </div>
 
       {/* Main pipeline visualization container */}

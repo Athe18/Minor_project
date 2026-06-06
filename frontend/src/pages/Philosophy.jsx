@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { philosophyAPI } from '../api';
 import { Sparkles, Copy, Check, RefreshCw, AlertTriangle, GraduationCap } from 'lucide-react';
 
-export default function Philosophy({ courseState, refreshState, activeSubjectId }) {
+export default function Philosophy({ courseState, refreshState, activeSubjectId, readOnly }) {
   const [philosophy, setPhilosophy] = useState('');
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -52,13 +52,19 @@ export default function Philosophy({ courseState, refreshState, activeSubjectId 
               Synthesize a professional Statement detailing curriculum delivery, assessment mapping, and student feedback loops.
             </p>
           </div>
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !courseState?.cos?.length}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-md transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Synthesizing statement...' : !courseState?.cos?.length ? 'Prerequisite: Generate COs first' : 'Generate Statement'}
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={handleGenerate}
+              disabled={loading || !courseState?.cos?.length}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-md transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Synthesizing statement...' : !courseState?.cos?.length ? 'Prerequisite: Generate COs first' : 'Generate Statement'}
+            </button>
+          ) : (
+            <div className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 rounded-xl text-center text-xs font-semibold">
+              No pedagogy statement generated yet. Pedagogical philosophy is configured by Course Faculty.
+            </div>
+          )}
         </div>
       ) : (
         <div className="glass-panel p-6 lg:p-8 space-y-6">
@@ -88,14 +94,16 @@ export default function Philosophy({ courseState, refreshState, activeSubjectId 
                 )}
               </button>
               
-              <button
-                onClick={handleGenerate}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-xs font-semibold rounded-lg transition-colors"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Regenerate
-              </button>
+              {!readOnly && (
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 text-xs font-semibold rounded-lg transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Regenerate
+                </button>
+              )}
             </div>
           </div>
 

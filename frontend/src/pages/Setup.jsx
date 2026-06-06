@@ -6,29 +6,53 @@ import api from '../api';
 const YEAR_THRESHOLDS = {
   FY: { lvl1: 50, lvl2: 55, lvl3: 60 },
   SY: { lvl1: 60, lvl2: 65, lvl3: 70 },
-  TY: { lvl1: 65, lvl2: 72, lvl3: 80 },
-  LY: { lvl1: 70, lvl2: 75, lvl3: 85 },
+  TY: { lvl1: 65, lvl2: 75, lvl3: 80 },
 };
 
 const YEAR_OPTIONS = [
-  { value: 'FY', label: 'First Year (FY)',   short: 'FY', style: 'bg-sky-500/5 text-sky-600 dark:text-sky-400 border-sky-500/10 dark:border-sky-500/20',       semLabel: 'Sem 1 & 2' },
-  { value: 'SY', label: 'Second Year (SY)',  short: 'SY', style: 'bg-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/10 dark:border-indigo-500/20',  semLabel: 'Sem 3 & 4' },
-  { value: 'TY', label: 'Third Year (TY)',   short: 'TY', style: 'bg-purple-500/5 text-purple-600 dark:text-purple-400 border-purple-500/10 dark:border-purple-500/20', semLabel: 'Sem 5 & 6' },
-  { value: 'LY', label: 'Final Year (LY)',   short: 'LY', style: 'bg-rose-500/5 text-rose-600 dark:text-rose-400 border-rose-500/10 dark:border-rose-500/20',      semLabel: 'Sem 7 & 8' },
+  { 
+    value: 'FY', 
+    label: 'First Year (FY)',   
+    short: 'FY', 
+    icon: BookOpen, 
+    style: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20', 
+    hoverBorder: 'hover:border-sky-500/40 hover:shadow-sky-500/[0.03]',
+    iconColor: 'text-sky-500 bg-sky-500/10 dark:bg-sky-500/20',
+    semLabel: 'Sem 1 & 2' 
+  },
+  { 
+    value: 'SY', 
+    label: 'Second Year (SY)',  
+    short: 'SY', 
+    icon: TestTube2, 
+    style: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20',  
+    hoverBorder: 'hover:border-indigo-500/40 hover:shadow-indigo-500/[0.03]',
+    iconColor: 'text-indigo-500 bg-indigo-500/10 dark:bg-indigo-500/20',
+    semLabel: 'Sem 3 & 4' 
+  },
+  { 
+    value: 'TY', 
+    label: 'Third Year (TY)',   
+    short: 'TY', 
+    icon: GraduationCap, 
+    style: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20', 
+    hoverBorder: 'hover:border-purple-500/40 hover:shadow-purple-500/[0.03]',
+    iconColor: 'text-purple-500 bg-purple-500/10 dark:bg-purple-500/20',
+    semLabel: 'Sem 5 & 6' 
+  },
 ];
 
 const SEM_OPTIONS = {
   FY: ['Semester 1', 'Semester 2'],
   SY: ['Semester 3', 'Semester 4'],
   TY: ['Semester 5', 'Semester 6'],
-  LY: ['Semester 7', 'Semester 8'],
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const isLab = (name) =>
   /\blab\b/i.test(name);
 
-export default function Setup({ setActiveTab, refreshState }) {
+export default function Setup({ setActiveTab, refreshState, readOnly }) {
   // Wizard state
   const [step, setStep]           = useState(1);   // 1=year, 2=semester, 3=subject
   const [year, setYear]           = useState('');
@@ -182,30 +206,52 @@ export default function Setup({ setActiveTab, refreshState }) {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {YEAR_OPTIONS.map((opt) => {
               const t = YEAR_THRESHOLDS[opt.value];
+              const CardIcon = opt.icon;
               return (
                 <button
                   key={opt.value}
                   onClick={() => handleYearSelect(opt.value)}
-                  className="group relative flex flex-col items-start text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl p-5 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/[0.02] hover:-translate-y-0.5 transition-all duration-200 cursor-pointer w-full"
+                  className={`group relative flex flex-col items-start text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-2xl p-6 hover:shadow-xl hover:shadow-slate-500/[0.03] hover:-translate-y-1 transition-all duration-300 cursor-pointer w-full ${opt.hoverBorder}`}
                 >
-                  <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${opt.style}`}>
-                    {opt.short}
-                  </span>
-                  
-                  <span className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-3">{opt.label}</span>
-                  <span className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{opt.semLabel}</span>
-
-                  <div className="mt-4 flex items-center gap-3 text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-850 w-full pt-3">
-                    <span className="font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-[8px]">Thresholds</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> L1 ≥ {t.lvl1}%</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> L2 ≥ {t.lvl2}%</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> L3 ≥ {t.lvl3}%</span>
+                  {/* Top header row with Icon and Short label */}
+                  <div className="flex justify-between items-center w-full">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 duration-300 ${opt.iconColor}`}>
+                      <CardIcon className="w-5 h-5" />
+                    </div>
+                    <span className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${opt.style}`}>
+                      {opt.short}
+                    </span>
                   </div>
 
-                  <ChevronRight className="absolute right-4 top-[35%] -translate-y-1/2 w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
+                  <span className="text-base font-bold text-slate-850 dark:text-slate-100 mt-5">{opt.label}</span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500 mt-1 font-medium">{opt.semLabel}</span>
+
+                  {/* Clean Visual Grid of Data Tiles for Thresholds */}
+                  <div className="mt-6 w-full space-y-2 border-t border-slate-100 dark:border-slate-850 pt-4">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block">NBA Targets</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50/60 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850/60 transition-colors group-hover:bg-slate-100/50 dark:group-hover:bg-slate-950/80">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 tracking-wider">LEVEL 1</span>
+                        <span className="text-[11px] font-bold text-slate-750 dark:text-slate-300 mt-0.5">≥ {t.lvl1}%</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50/60 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850/60 transition-colors group-hover:bg-slate-100/50 dark:group-hover:bg-slate-950/80">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 tracking-wider">LEVEL 2</span>
+                        <span className="text-[11px] font-bold text-slate-750 dark:text-slate-300 mt-0.5">≥ {t.lvl2}%</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-slate-50/60 dark:bg-slate-950/40 border border-slate-100 dark:border-slate-850/60 transition-colors group-hover:bg-slate-100/50 dark:group-hover:bg-slate-950/80">
+                        <span className="text-[8px] font-bold text-slate-400 dark:text-slate-500 tracking-wider">LEVEL 3</span>
+                        <span className="text-[11px] font-bold text-slate-750 dark:text-slate-300 mt-0.5">≥ {t.lvl3}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Clean Circle Styled Chevron Arrow */}
+                  <div className="absolute top-5 right-5 w-7 h-7 rounded-full bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850 flex items-center justify-center text-slate-300 group-hover:text-blue-500 group-hover:border-blue-500/20 group-hover:bg-blue-500/5 group-hover:translate-x-0.5 transition-all duration-200">
+                    <ChevronRight className="w-4 h-4" />
+                  </div>
                 </button>
               );
             })}
@@ -377,13 +423,20 @@ export default function Setup({ setActiveTab, refreshState }) {
                 </button>
                 <button
                   onClick={handleProceed}
-                  disabled={loading}
-                  className="flex-[2] py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/20 transition-all text-xs"
+                  disabled={loading || readOnly}
+                  className={`flex-[2] py-3 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-xs ${
+                    readOnly 
+                      ? 'bg-slate-400 dark:bg-slate-800 cursor-not-allowed opacity-60 shadow-none' 
+                      : 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/20 shadow-lg'
+                  }`}
                 >
-                  {loading
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Configuring Course...</>
-                    : <><ChevronRight className="w-4 h-4" /> Proceed to Course Outcomes</>
-                  }
+                  {loading ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Configuring Course...</>
+                  ) : readOnly ? (
+                    <><ChevronRight className="w-4 h-4" /> Read-Only View Mode</>
+                  ) : (
+                    <><ChevronRight className="w-4 h-4" /> Proceed to Course Outcomes</>
+                  )}
                 </button>
               </div>
             </div>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { attainmentAPI } from '../api';
 import { Lightbulb, CheckCircle2, ArrowRight, RefreshCw, Layers } from 'lucide-react';
 
-export default function Recommendations({ courseState, refreshState, activeSubjectId }) {
+export default function Recommendations({ courseState, refreshState, activeSubjectId, readOnly }) {
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -41,7 +41,7 @@ export default function Recommendations({ courseState, refreshState, activeSubje
           </p>
         </div>
 
-        {recommendations.length > 0 && (
+        {!readOnly && recommendations.length > 0 && (
           <button
             onClick={handleGenerate}
             disabled={loading}
@@ -64,13 +64,19 @@ export default function Recommendations({ courseState, refreshState, activeSubje
               Analyze CO/PO attainment levels and suggest modifications to class assignments, tutorials, or syllabus layouts.
             </p>
           </div>
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !courseState?.co_attainment?.length}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-md transition-colors disabled:opacity-50"
-          >
-            {loading ? 'Analyzing data and generating...' : !courseState?.co_attainment?.length ? 'Prerequisite: Calculate Attainments first' : 'Generate Recommendations'}
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={handleGenerate}
+              disabled={loading || !courseState?.co_attainment?.length}
+              className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-md transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Analyzing data and generating...' : !courseState?.co_attainment?.length ? 'Prerequisite: Calculate Attainments first' : 'Generate Recommendations'}
+            </button>
+          ) : (
+            <div className="p-4 bg-slate-100 dark:bg-slate-900 text-slate-500 rounded-xl text-center text-xs font-semibold">
+              No recommendations generated yet. Improvement recommendations are configured by Course Faculty based on student attainments.
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

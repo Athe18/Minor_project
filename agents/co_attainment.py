@@ -1,4 +1,5 @@
 import pandas as pd
+from typing import Optional
 from core.schemas import COAttainment
 from core.state import AgentState
 
